@@ -1,12 +1,15 @@
 {
   "name": "telegram-m3u-bot",
   "version": "1.0.0",
-  "main": "api/bot.js",
   "scripts": {
-    "start": "vercel dev"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
   },
   "dependencies": {
+    "next": "^14.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
     "node-fetch": "^3.3.1"
-  },
-  "type": "module"
+  }
 }
