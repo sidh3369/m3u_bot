@@ -10,10 +10,15 @@ const PORT = process.env.PORT || 3000;
 // Middleware to parse JSON bodies
 app.use(express.json());
 
+// In-memory log store (resets on serverless restart; use a DB for production)
+const logs = [];
+
 // 1. Validate environment variables
 const { BOT_TOKEN, GITHUB_TOKEN, GITHUB_REPO, MY_ID } = process.env;
 if (!BOT_TOKEN || !GITHUB_TOKEN || !GITHUB_REPO || !MY_ID) {
-  console.error("Missing environment variables");
+  const error = "Missing environment variables";
+  console.error(error);
+  logs.push({ timestamp: new Date().toISOString(), type: 'error', message: error });
   process.exit(1);
 }
 
@@ -22,29 +27,32 @@ const ALLOWED_USER_IDS = MY_ID.split(",").map(id => id.trim());
 
 // Main handler for Telegram webhook
 app.post('/webhook', async (req, res) => {
-  // Dynamically import node-fetch
   const fetch = (await import('node-fetch')).default;
   try {
     // 3. Validate incoming message and document
     const body = req.body;
     if (!body.message || !body.message.document) {
+      logs.push({ timestamp: new Date().toISOString(), type: 'info', message: 'No document in request' });
       return res.status(200).send("No document");
     }
 
     const userId = body.message.from?.id?.toString();
     if (!userId) {
+      logs.push({ timestamp: new Date().toISOString(), type: 'error', message: 'No user ID found' });
       await sendTelegramMessage(BOT_TOKEN, body.message.chat.id, "❌ No user ID found.");
       return res.status(200).send("No user ID");
     }
 
     // 4. Check authorization
     if (!ALLOWED_USER_IDS.includes(userId)) {
+      logs.push({ timestamp: new Date().toISOString(), type: 'error', message: `Unauthorized user: ${userId}` });
       await sendTelegramMessage(BOT_TOKEN, body.message.chat.id, "❌ Unauthorized user.");
       return res.status(200).send("Unauthorized user");
     }
 
     const fileId = body.message.document.file_id;
     if (!fileId) {
+      logs.push({ timestamp: new Date().toISOString(), type: 'error', message: 'No file ID in document' });
       await sendTelegramMessage(BOT_TOKEN, body.message.chat.id, "❌ No file ID in document.");
       return res.status(200).send("No file ID");
     }
@@ -52,6 +60,7 @@ app.post('/webhook', async (req, res) => {
     // 5. Validate file type
     const fileName = body.message.document.file_name || "unknown.m3u";
     if (!fileName.toLowerCase().endsWith(".m3u")) {
+      logs.push({ timestamp: new Date().toISOString(), type: 'error', message: `Invalid file type: ${fileName}` });
       await sendTelegramMessage(BOT_TOKEN, body.message.chat.id, "❌ Only M3U files are allowed.");
       return res.status(200).send("Invalid file type");
     }
@@ -62,7 +71,9 @@ app.post('/webhook', async (req, res) => {
     });
     const fileInfo = await fileInfoResp.json();
     if (!fileInfo.ok) {
-      throw new Error(`Failed to get file path: ${fileInfo.description || "Unknown error"}`);
+      const error = `Failed to get file path: ${fileInfo.description || "Unknown error"}`;
+      logs.push({ timestamp: new Date().toISOString(), type: 'error', message: error });
+      throw new Error(error);
     }
 
     const fileUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${fileInfo.result.file_path}`;
@@ -72,7 +83,9 @@ app.post('/webhook', async (req, res) => {
       signal: AbortSignal.timeout(10000)
     });
     if (!fileResp.ok) {
-      throw new Error(`Failed to download file: ${fileResp.statusText}`);
+      const error = `Failed to download file: ${fileResp.statusText}`;
+      logs.push({ timestamp: new Date().toISOString(), type: 'error', message: error });
+      throw new Error(error);
     }
     const fileBuffer = await fileResp.arrayBuffer();
 
@@ -96,7 +109,9 @@ app.post('/webhook', async (req, res) => {
 
     const uploadResult = await uploadResp.json();
     if (!uploadResp.ok) {
-      throw new Error(uploadResult.message || "GitHub upload failed");
+      const error = uploadResult.message || "GitHub upload failed";
+      logs.push({ timestamp: new Date().toISOString(), type: 'error', message: error });
+      throw new Error(error);
     }
 
     // 10. Send success message
@@ -105,14 +120,21 @@ app.post('/webhook', async (req, res) => {
       body.message.chat.id,
       `✅ Uploaded successfully.\nhttps://raw.githubusercontent.com/${GITHUB_REPO}/main/1.m3u`
     );
+    logs.push({ timestamp: new Date().toISOString(), type: 'info', message: 'File uploaded successfully' });
     res.status(200).send("OK");
   } catch (error) {
     console.error("Error:", error.message);
+    logs.push({ timestamp: new Date().toISOString(), type: 'error', message: error.message });
     if (req.body?.message?.chat?.id) {
       await sendTelegramMessage(BOT_TOKEN, req.body.message.chat.id, `❌ Error: ${error.message}`);
     }
     res.status(500).send("Error");
   }
+});
+
+// Logs endpoint
+app.get('/logs', (req, res) => {
+  res.json(logs.slice(-10)); // Return last 10 logs
 });
 
 // Helper to send message via Telegram
@@ -126,7 +148,9 @@ async function sendTelegramMessage(token, chat_id, text) {
   });
   const result = await response.json();
   if (!result.ok) {
-    throw new Error(`Telegram send failed: ${result.description || "Unknown error"}`);
+    const error = `Telegram send failed: ${result.description || "Unknown error"}`;
+    logs.push({ timestamp: new Date().toISOString(), type: 'error', message: error });
+    throw new Error(error);
   }
 }
 
@@ -137,7 +161,10 @@ async function getGitHubFileSha(repo, token, path) {
     headers: { Authorization: `token ${token}` },
     signal: AbortSignal.timeout(5000)
   });
-  if (!resp.ok) return null;
+  if (!resp.ok) {
+    logs.push({ timestamp: new Date().toISOString(), type: 'info', message: `No existing file at ${path}` });
+    return null;
+  }
   const data = await resp.json();
   return data.sha;
 }
@@ -158,7 +185,9 @@ async function setWebhook() {
   const fetch = (await import('node-fetch')).default;
   const webhookUrl = process.env.WEBHOOK_URL;
   if (!webhookUrl) {
-    console.error("WEBHOOK_URL not set");
+    const error = "WEBHOOK_URL not set";
+    console.error(error);
+    logs.push({ timestamp: new Date().toISOString(), type: 'error', message: error });
     return;
   }
   try {
@@ -166,10 +195,13 @@ async function setWebhook() {
     const result = await response.json();
     if (result.ok) {
       console.log("Webhook set successfully:", webhookUrl);
+      logs.push({ timestamp: new Date().toISOString(), type: 'info', message: 'Webhook set successfully: ' + webhookUrl });
     } else {
       console.error("Failed to set webhook:", result.description);
+      logs.push({ timestamp: new Date().toISOString(), type: 'error', message: 'Failed to set webhook: ' + result.description });
     }
   } catch (error) {
     console.error("Error setting webhook:", error);
+    logs.push({ timestamp: new Date().toISOString(), type: 'error', message: 'Error setting webhook: ' + error.message });
   }
 }
