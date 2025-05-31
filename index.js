@@ -1,5 +1,4 @@
 const express = require('express');
-const fetch = require('node-fetch');
 const dotenv = require('dotenv');
 
 // Load environment variables from .env file (for local dev)
@@ -23,6 +22,9 @@ const ALLOWED_USER_IDS = MY_ID.split(",").map(id => id.trim());
 
 // Main handler for Telegram webhook
 app.post('/webhook', async (req, res) => {
+  // Dynamically import node-fetch
+  const fetch = (await import('node-fetch')).default;
+
   try {
     // 3. Validate incoming message and document
     const body = req.body;
@@ -116,6 +118,7 @@ app.post('/webhook', async (req, res) => {
 
 // Helper to send message via Telegram
 async function sendTelegramMessage(token, chat_id, text) {
+  const fetch = (await import('node-fetch')).default;
   const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -130,6 +133,7 @@ async function sendTelegramMessage(token, chat_id, text) {
 
 // Helper to get file SHA from GitHub (for overwriting)
 async function getGitHubFileSha(repo, token, path) {
+  const fetch = (await import('node-fetch')).default;
   const resp = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
     headers: { Authorization: `token ${token}` },
     signal: AbortSignal.timeout(5000) // 5-second timeout
@@ -152,6 +156,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 // Set Telegram webhook (run once during setup)
 async function setWebhook() {
+  const fetch = (await import('node-fetch')).default;
   const webhookUrl = process.env.WEBHOOK_URL; // e.g., https://your-app.vercel.app/webhook
   if (!webhookUrl) {
     console.error("WEBHOOK_URL not set in .env");
