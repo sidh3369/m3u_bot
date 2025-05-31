@@ -1,7 +1,7 @@
 const express = require('express');
 const dotenv = require('dotenv');
 
-// Load environment variables from .env file (for local dev)
+// Load environment variables (for local dev)
 dotenv.config();
 
 const app = express();
@@ -17,14 +17,13 @@ if (!BOT_TOKEN || !GITHUB_TOKEN || !GITHUB_REPO || !MY_ID) {
   process.exit(1);
 }
 
-// 2. Parse allowed user IDs (assuming MY_ID is a comma-separated string)
+// 2. Parse allowed user IDs
 const ALLOWED_USER_IDS = MY_ID.split(",").map(id => id.trim());
 
 // Main handler for Telegram webhook
 app.post('/webhook', async (req, res) => {
   // Dynamically import node-fetch
   const fetch = (await import('node-fetch')).default;
-
   try {
     // 3. Validate incoming message and document
     const body = req.body;
@@ -50,7 +49,7 @@ app.post('/webhook', async (req, res) => {
       return res.status(200).send("No file ID");
     }
 
-    // 5. Validate file type (basic check for M3U)
+    // 5. Validate file type
     const fileName = body.message.document.file_name || "unknown.m3u";
     if (!fileName.toLowerCase().endsWith(".m3u")) {
       await sendTelegramMessage(BOT_TOKEN, body.message.chat.id, "❌ Only M3U files are allowed.");
@@ -59,7 +58,7 @@ app.post('/webhook', async (req, res) => {
 
     // 6. Get file path from Telegram
     const fileInfoResp = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${fileId}`, {
-      signal: AbortSignal.timeout(5000) // 5-second timeout
+      signal: AbortSignal.timeout(5000)
     });
     const fileInfo = await fileInfoResp.json();
     if (!fileInfo.ok) {
@@ -70,14 +69,14 @@ app.post('/webhook', async (req, res) => {
 
     // 7. Download file content
     const fileResp = await fetch(fileUrl, {
-      signal: AbortSignal.timeout(10000) // 10-second timeout
+      signal: AbortSignal.timeout(10000)
     });
     if (!fileResp.ok) {
       throw new Error(`Failed to download file: ${fileResp.statusText}`);
     }
     const fileBuffer = await fileResp.arrayBuffer();
 
-    // 8. Get SHA of existing file to overwrite
+    // 8. Get SHA of existing file
     const sha = await getGitHubFileSha(GITHUB_REPO, GITHUB_TOKEN, "1.m3u");
 
     // 9. Upload to GitHub
@@ -92,7 +91,7 @@ app.post('/webhook', async (req, res) => {
         content: Buffer.from(fileBuffer).toString("base64"),
         ...(sha ? { sha } : {}),
       }),
-      signal: AbortSignal.timeout(10000) // 10-second timeout
+      signal: AbortSignal.timeout(10000)
     });
 
     const uploadResult = await uploadResp.json();
@@ -108,7 +107,7 @@ app.post('/webhook', async (req, res) => {
     );
     res.status(200).send("OK");
   } catch (error) {
-    console.error("Error:", error);
+    console.error("Error:", error.message);
     if (req.body?.message?.chat?.id) {
       await sendTelegramMessage(BOT_TOKEN, req.body.message.chat.id, `❌ Error: ${error.message}`);
     }
@@ -123,7 +122,7 @@ async function sendTelegramMessage(token, chat_id, text) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ chat_id, text }),
-    signal: AbortSignal.timeout(5000) // 5-second timeout
+    signal: AbortSignal.timeout(5000)
   });
   const result = await response.json();
   if (!result.ok) {
@@ -131,22 +130,22 @@ async function sendTelegramMessage(token, chat_id, text) {
   }
 }
 
-// Helper to get file SHA from GitHub (for overwriting)
+// Helper to get file SHA from GitHub
 async function getGitHubFileSha(repo, token, path) {
   const fetch = (await import('node-fetch')).default;
   const resp = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
     headers: { Authorization: `token ${token}` },
-    signal: AbortSignal.timeout(5000) // 5-second timeout
+    signal: AbortSignal.timeout(5000)
   });
-  if (!resp.ok) return null; // Return null if file doesn’t exist (e.g., 404)
+  if (!resp.ok) return null;
   const data = await resp.json();
   return data.sha;
 }
 
-// Export for Vercel (serverless)
+// Export for Vercel
 module.exports = app;
 
-// For local development, start the server
+// For local development
 if (process.env.NODE_ENV !== 'production') {
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
@@ -154,12 +153,12 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 
-// Set Telegram webhook (run once during setup)
+// Set Telegram webhook
 async function setWebhook() {
   const fetch = (await import('node-fetch')).default;
-  const webhookUrl = process.env.WEBHOOK_URL; // e.g., https://your-app.vercel.app/webhook
+  const webhookUrl = process.env.WEBHOOK_URL;
   if (!webhookUrl) {
-    console.error("WEBHOOK_URL not set in .env");
+    console.error("WEBHOOK_URL not set");
     return;
   }
   try {
