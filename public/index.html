@@ -12,15 +12,16 @@
       padding: 20px;
       background-color: #f5f5f5;
     }
-    h1 {
+    h1, h2 {
       color: #333;
       text-align: center;
     }
-    .checklist {
+    .checklist, .logs {
       background: white;
       padding: 20px;
       border-radius: 10px;
       box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
     }
     .item {
       margin: 10px 0;
@@ -48,6 +49,25 @@
     .success {
       color: #2e7d32;
     }
+    .log-entry {
+      font-size: 14px;
+      padding: 10px;
+      border-bottom: 1px solid #eee;
+    }
+    .log-entry.error {
+      color: #d32f2f;
+    }
+    button {
+      padding: 10px 20px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #0056b3;
+    }
   </style>
 </head>
 <body>
@@ -57,49 +77,49 @@
       <input type="checkbox" id="step1">
       <label for="step1">1. Environment Variables Set</label>
       <span class="status" id="status1">Not Checked</span>
-      <div class="note">Check .env file for BOT_TOKEN, GITHUB_TOKEN, GITHUB_REPO, MY_ID, and WEBHOOK_URL.</div>
+      <div class="note">Check Vercel dashboard for BOT_TOKEN, GITHUB_TOKEN, GITHUB_REPO, MY_ID, and WEBHOOK_URL.</div>
     </div>
     <div class="item">
       <input type="checkbox" id="step2">
-      <label for="step2">2. Server Starts</label>
+      <label for="step2">2. Server Deploys</label>
       <span class="status" id="status2">Not Checked</span>
-      <div class="note">Run 'npm start' and check console for "Server running on port 3000".</div>
+      <div class="note">Run 'vercel --prod' and check deployment in Vercel dashboard.</div>
     </div>
     <div class="item">
       <input type="checkbox" id="step3">
       <label for="step3">3. Webhook Set</label>
       <span class="status" id="status3">Not Checked</span>
-      <div class="note">Check console for "Webhook set successfully" or error. Verify with Telegram API: https://api.telegram.org/bot&lt;BOT_TOKEN&gt;/getWebhookInfo</div>
+      <div class="note">Check logs or https://api.telegram.org/bot<BOT_TOKEN>/getWebhookInfo for success.</div>
     </div>
     <div class="item">
       <input type="checkbox" id="step4">
       <label for="step4">4. Send Test Message</label>
       <span class="status" id="status4">Not Checked</span>
-      <div class="note">Send a non-file message to bot via Telegram; expect "No document" response in logs or Telegram.</div>
+      <div class="note">Send a non-file message to bot; expect "No document" in logs or Telegram.</div>
     </div>
     <div class="item">
       <input type="checkbox" id="step5">
       <label for="step5">5. Test Authorization</label>
       <span class="status" id="status5">Not Checked</span>
-      <div class="note">Send an M3U file from an unauthorized user ID; expect "❌ Unauthorized user" in Telegram.</div>
+      <div class="note">Send M3U file from unauthorized user; expect "❌ Unauthorized user" in Telegram.</div>
     </div>
     <div class="item">
       <input type="checkbox" id="step6">
       <label for="step6">6. Test File Type</label>
       <span class="status" id="status6">Not Checked</span>
-      <div class="note">Send a non-M3U file (e.g., .txt) from allowed user; expect "❌ Only M3U files are allowed" in Telegram.</div>
+      <div class="note">Send non-M3U file from allowed user; expect "❌ Only M3U files are allowed" in Telegram.</div>
     </div>
     <div class="item">
       <input type="checkbox" id="step7">
       <label for="step7">7. Telegram File Download</label>
       <span class="status" id="status7">Not Checked</span>
-      <div class="note">Send an M3U file from allowed user; check logs for errors on file path or download failure.</div>
+      <div class="note">Send M3U file from allowed user; check logs for download errors.</div>
     </div>
     <div class="item">
       <input type="checkbox" id="step8">
       <label for="step8">8. GitHub Upload</label>
       <span class="status" id="status8">Not Checked</span>
-      <div class="note">Send an M3U file; check GitHub repo for updated 1.m3u; expect "✅ Uploaded successfully" in Telegram.</div>
+      <div class="note">Send M3U file; check GitHub repo for 1.m3u; expect "✅ Uploaded successfully" in Telegram.</div>
     </div>
     <div class="item">
       <input type="checkbox" id="step9">
@@ -109,8 +129,14 @@
     </div>
   </div>
 
+  <h2>Telegram Bot Logs</h2>
+  <div class="logs">
+    <button onclick="fetchLogs()">Fetch Logs</button>
+    <div id="logContainer"></div>
+  </div>
+
   <script>
-    // Update status when checkboxes are clicked
+    // Update checklist status
     document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
       checkbox.addEventListener('change', () => {
         const status = document.getElementById(`status${checkbox.id.replace('step', '')}`);
@@ -123,6 +149,29 @@
         }
       });
     });
+
+    // Fetch and display logs
+    async function fetchLogs() {
+      try {
+        const response = await fetch('/logs');
+        const logs = await response.json();
+        const logContainer = document.getElementById('logContainer');
+        logContainer.innerHTML = '';
+        if (logs.length === 0) {
+          logContainer.innerHTML = '<p>No logs available.</p>';
+          return;
+        }
+        logs.forEach(log => {
+          const div = document.createElement('div');
+          div.className = 'log-entry' + (log.type === 'error' ? ' error' : '');
+          div.textContent = `[${log.timestamp}] ${log.type.toUpperCase()}: ${log.message}`;
+          logContainer.appendChild(div);
+        });
+      } catch (error) {
+        const logContainer = document.getElementById('logContainer');
+        logContainer.innerHTML = '<p class="error">Error fetching logs: ' + error.message + '</p>';
+      }
+    }
   </script>
 </body>
 </html>
