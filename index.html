@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Telegram M3U Bot Checklist</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 20px auto;
+      padding: 20px;
+      background-color: #f5f5f5;
+    }
+    h1 {
+      color: #333;
+      text-align: center;
+    }
+    .checklist {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .item {
+      margin: 10px 0;
+      display: flex;
+      align-items: center;
+    }
+    .item input {
+      margin-right: 10px;
+    }
+    .item label {
+      font-size: 16px;
+      color: #444;
+    }
+    .note {
+      font-style: italic;
+      color: #666;
+      font-size: 14px;
+      margin-top: 5px;
+    }
+    .status {
+      margin-left: 20px;
+      font-weight: bold;
+      color: #d32f2f;
+    }
+    .success {
+      color: #2e7d32;
+    }
+  </style>
+</head>
+<body>
+  <h1>Telegram M3U Bot Checklist</h1>
+  <div class="checklist">
+    <div class="item">
+      <input type="checkbox" id="step1">
+      <label for="step1">1. Environment Variables Set</label>
+      <span class="status" id="status1">Not Checked</span>
+      <div class="note">Check .env file for BOT_TOKEN, GITHUB_TOKEN, GITHUB_REPO, MY_ID, and WEBHOOK_URL.</div>
+    </div>
+    <div class="item">
+      <input type="checkbox" id="step2">
+      <label for="step2">2. Server Starts</label>
+      <span class="status" id="status2">Not Checked</span>
+      <div class="note">Run 'npm start' and check console for "Server running on port 3000".</div>
+    </div>
+    <div class="item">
+      <input type="checkbox" id="step3">
+      <label for="step3">3. Webhook Set</label>
+      <span class="status" id="status3">Not Checked</span>
+      <div class="note">Check console for "Webhook set successfully" or error. Verify with Telegram API: https://api.telegram.org/bot&lt;BOT_TOKEN&gt;/getWebhookInfo</div>
+    </div>
+    <div class="item">
+      <input type="checkbox" id="step4">
+      <label for="step4">4. Send Test Message</label>
+      <span class="status" id="status4">Not Checked</span>
+      <div class="note">Send a non-file message to bot via Telegram; expect "No document" response in logs or Telegram.</div>
+    </div>
+    <div class="item">
+      <input type="checkbox" id="step5">
+      <label for="step5">5. Test Authorization</label>
+      <span class="status" id="status5">Not Checked</span>
+      <div class="note">Send an M3U file from an unauthorized user ID; expect "❌ Unauthorized user" in Telegram.</div>
+    </div>
+    <div class="item">
+      <input type="checkbox" id="step6">
+      <label for="step6">6. Test File Type</label>
+      <span class="status" id="status6">Not Checked</span>
+      <div class="note">Send a non-M3U file (e.g., .txt) from allowed user; expect "❌ Only M3U files are allowed" in Telegram.</div>
+    </div>
+    <div class="item">
+      <input type="checkbox" id="step7">
+      <label for="step7">7. Telegram File Download</label>
+      <span class="status" id="status7">Not Checked</span>
+      <div class="note">Send an M3U file from allowed user; check logs for errors on file path or download failure.</div>
+    </div>
+    <div class="item">
+      <input type="checkbox" id="step8">
+      <label for="step8">8. GitHub Upload</label>
+      <span class="status" id="status8">Not Checked</span>
+      <div class="note">Send an M3U file; check GitHub repo for updated 1.m3u; expect "✅ Uploaded successfully" in Telegram.</div>
+    </div>
+    <div class="item">
+      <input type="checkbox" id="step9">
+      <label for="step9">9. Error Handling</label>
+      <span class="status" id="status9">Not Checked</span>
+      <div class="note">Test with invalid BOT_TOKEN or GITHUB_TOKEN; expect "❌ Error" in Telegram and logs.</div>
+    </div>
+  </div>
+
+  <script>
+    // Update status when checkboxes are clicked
+    document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+      checkbox.addEventListener('change', () => {
+        const status = document.getElementById(`status${checkbox.id.replace('step', '')}`);
+        if (checkbox.checked) {
+          status.textContent = "Checked - OK";
+          status.classList.add('success');
+        } else {
+          status.textContent = "Not Checked";
+          status.classList.remove('success');
+        }
+      });
+    });
+  </script>
+</body>
+</html>
