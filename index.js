@@ -89,24 +89,23 @@ app.post('/webhook', async (req, res) => {
     }
     const fileBuffer = await fileResp.arrayBuffer();
 
-    // 8. Get SHA of existing file
-    const sha = await getGitHubFileSha(GITHUB_REPO, GITHUB_TOKEN, "1.m3u");
+   // Get SHA of existing file (to overwrite)
+const sha = await getGitHubFileSha(GITHUB_REPO, GITHUB_TOKEN, "1.m3u");
 
-    // 9. Upload to GitHub
-    const uploadResp = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/1.m3u`, {
-      method: "PUT",
-      headers: {
-        Authorization: `token ${GITHUB_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        message: "Update 1.m3u via Telegram bot",
-        content: Buffer.from(fileBuffer).toString("base64"),
-        ...(sha ? { sha } : {}),
-      }),
-      signal: AbortSignal.timeout(10000)
-    });
-
+// Upload to GitHub
+const uploadResp = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/1.m3u`, {
+  method: "PUT",
+  headers: {
+    Authorization: `token ${GITHUB_TOKEN}`,
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    message: "Update 1.m3u via Telegram bot",
+    content: Buffer.from(fileBuffer).toString("base64"),
+    ...(sha ? { sha } : {}), // Include SHA if file exists to overwrite
+  }),
+  signal: AbortSignal.timeout(10000)
+});
     const uploadResult = await uploadResp.json();
     if (!uploadResp.ok) {
       const error = uploadResult.message || "GitHub upload failed";
