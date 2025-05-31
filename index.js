@@ -2,7 +2,7 @@ const express = require('express');
 const fetch = require('node-fetch');
 const dotenv = require('dotenv');
 
-// Load environment variables from .env file
+// Load environment variables from .env file (for local dev)
 dotenv.config();
 
 const app = express();
@@ -139,16 +139,20 @@ async function getGitHubFileSha(repo, token, path) {
   return data.sha;
 }
 
-// Start the server
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  // Set Telegram webhook (run once during setup)
-  setWebhook();
-});
+// Export for Vercel (serverless)
+module.exports = app;
 
-// Set Telegram webhook
+// For local development, start the server
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    setWebhook();
+  });
+}
+
+// Set Telegram webhook (run once during setup)
 async function setWebhook() {
-  const webhookUrl = process.env.WEBHOOK_URL; // e.g., https://your-domain.com/webhook
+  const webhookUrl = process.env.WEBHOOK_URL; // e.g., https://your-app.vercel.app/webhook
   if (!webhookUrl) {
     console.error("WEBHOOK_URL not set in .env");
     return;
