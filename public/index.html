@@ -74,57 +74,57 @@
   <h1>Telegram M3U Bot Checklist</h1>
   <div class="checklist">
     <div class="item">
-      <input type="checkbox" id="step1">
+      <input type="checkbox" id="step1" disabled>
       <label for="step1">1. Environment Variables Set</label>
-      <span class="status" id="status1">Not Checked</span>
+      <span class="status" id="status1">Checking...</span>
       <div class="note">Check Vercel dashboard for BOT_TOKEN, GITHUB_TOKEN, GITHUB_REPO, MY_ID, and WEBHOOK_URL.</div>
     </div>
     <div class="item">
-      <input type="checkbox" id="step2">
+      <input type="checkbox" id="step2" disabled>
       <label for="step2">2. Server Deploys</label>
-      <span class="status" id="status2">Not Checked</span>
+      <span class="status" id="status2">Checking...</span>
       <div class="note">Push to GitHub; check Vercel dashboard for deployment success.</div>
     </div>
     <div class="item">
-      <input type="checkbox" id="step3">
+      <input type="checkbox" id="step3" disabled>
       <label for="step3">3. Webhook Set</label>
-      <span class="status" id="status3">Not Checked</span>
+      <span class="status" id="status3">Checking...</span>
       <div class="note">Check logs or https://api.telegram.org/bot<BOT_TOKEN>/getWebhookInfo for success.</div>
     </div>
     <div class="item">
-      <input type="checkbox" id="step4">
+      <input type="checkbox" id="step4" disabled>
       <label for="step4">4. Send Test Message</label>
-      <span class="status" id="status4">Not Checked</span>
+      <span class="status" id="status4">Checking...</span>
       <div class="note">Send a non-file message to bot; expect "No document" in logs or Telegram.</div>
     </div>
     <div class="item">
-      <input type="checkbox" id="step5">
+      <input type="checkbox" id="step5" disabled>
       <label for="step5">5. Test Authorization</label>
-      <span class="status" id="status5">Not Checked</span>
+      <span class="status" id="status5">Checking...</span>
       <div class="note">Send M3U file from unauthorized user; expect "❌ Unauthorized user" in Telegram.</div>
     </div>
     <div class="item">
-      <input type="checkbox" id="step6">
+      <input type="checkbox" id="step6" disabled>
       <label for="step6">6. Test File Type</label>
-      <span class="status" id="status6">Not Checked</span>
+      <span class="status" id="status6">Checking...</span>
       <div class="note">Send non-M3U file from allowed user; expect "❌ Only M3U files are allowed" in Telegram.</div>
     </div>
     <div class="item">
-      <input type="checkbox" id="step7">
+      <input type="checkbox" id="step7" disabled>
       <label for="step7">7. Telegram File Download</label>
-      <span class="status" id="status7">Not Checked</span>
+      <span class="status" id="status7">Checking...</span>
       <div class="note">Send M3U file from allowed user; check logs for download errors.</div>
     </div>
     <div class="item">
-      <input type="checkbox" id="step8">
+      <input type="checkbox" id="step8" disabled>
       <label for="step8">8. GitHub Upload</label>
-      <span class="status" id="status8">Not Checked</span>
+      <span class="status" id="status8">Checking...</span>
       <div class="note">Send M3U file; check GitHub repo for 1.m3u; expect "✅ Uploaded successfully" in Telegram.</div>
     </div>
     <div class="item">
-      <input type="checkbox" id="step9">
+      <input type="checkbox" id="step9" disabled>
       <label for="step9">9. Error Handling</label>
-      <span class="status" id="status9">Not Checked</span>
+      <span class="status" id="status9">Checking...</span>
       <div class="note">Test with invalid BOT_TOKEN or GITHUB_TOKEN; expect "❌ Error" in Telegram and logs.</div>
     </div>
   </div>
@@ -137,18 +137,139 @@
 
   <script>
     // Update checklist status
-    document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
-      checkbox.addEventListener('change', () => {
-        const status = document.getElementById(`status${checkbox.id.replace('step', '')}`);
-        if (checkbox.checked) {
-          status.textContent = "Checked - OK";
-          status.classList.add('success');
-        } else {
-          status.textContent = "Not Checked";
-          status.classList.remove('success');
-        }
-      });
-    });
+    function updateStatus(step, isSuccess, message = '') {
+      const checkbox = document.getElementById(`step${step}`);
+      const status = document.getElementById(`status${step}`);
+      if (isSuccess) {
+        checkbox.checked = true;
+        status.textContent = 'Checked - OK';
+        status.classList.add('success');
+      } else {
+        checkbox.checked = false;
+        status.textContent = `Error: ${message || 'Failed'}`;
+        status.classList.remove('success');
+      }
+    }
+
+    // Mock API checks (replace with real API calls)
+    async function checkEnvironmentVariables() {
+      try {
+        // Replace with actual check (e.g., fetch from /api/env or server-side endpoint)
+        const response = await fetch('/api/check-env'); // Mock endpoint
+        const data = await response.json();
+        return data.success ? { success: true } : { success: false, error: data.error || 'Missing variables' };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    }
+
+    async function checkServerDeployment() {
+      try {
+        // Replace with Vercel API call to check deployment status
+        const response = await fetch('/api/check-deployment'); // Mock endpoint
+        const data = await response.json();
+        return data.success ? { success: true } : { success: false, error: data.error || 'Deployment failed' };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    }
+
+    async function checkWebhook() {
+      try {
+        // Replace with Telegram API call: https://api.telegram.org/bot<BOT_TOKEN>/getWebhookInfo
+        const response = await fetch('/api/check-webhook'); // Mock endpoint
+        const data = await response.json();
+        return data.success ? { success: true } : { success: false, error: data.error || 'Webhook not set' };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    }
+
+    async function checkTestMessage() {
+      try {
+        // Simulate sending a test message and checking logs
+        const response = await fetch('/api/test-message'); // Mock endpoint
+        const data = await response.json();
+        return data.message === 'No document' ? { success: true } : { success: false, error: 'Unexpected response' };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    }
+
+    async function checkAuthorization() {
+      try {
+        // Simulate sending M3U from unauthorized user
+        const response = await fetch('/api/test-auth'); // Mock endpoint
+        const data = await response.json();
+        return data.message === '❌ Unauthorized user' ? { success: true } : { success: false, error: 'Authorization check failed' };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    }
+
+    async function checkFileType() {
+      try {
+        // Simulate sending non-M3U file
+        const response = await fetch('/api/test-file-type'); // Mock endpoint
+        const data = await response.json();
+        return data.message === '❌ Only M3U files are allowed' ? { success: true } : { success: false, error: 'File type check failed' };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    }
+
+    async function checkFileDownload() {
+      try {
+        // Simulate sending M3U and checking download
+        const response = await fetch('/api/test-download'); // Mock endpoint
+        const data = await response.json();
+        return data.success ? { success: true } : { success: false, error: data.error || 'Download failed' };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    }
+
+    async function checkGitHubUpload() {
+      try {
+        // Simulate GitHub upload check
+        const response = await fetch('/api/check-github-upload'); // Mock endpoint
+        const data = await response.json();
+        return data.message === '✅ Uploaded successfully' ? { success: true } : { success: false, error: 'Upload failed' };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    }
+
+    async function checkErrorHandling() {
+      try {
+        // Simulate invalid token scenario
+        const response = await fetch('/api/test-error-handling'); // Mock endpoint
+        const data = await response.json();
+        return data.message.includes('❌ Error') ? { success: true } : { success: false, error: 'Error handling failed' };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    }
+
+    // Run all checks on page load
+    async function runChecks() {
+      const checks = [
+        { step: 1, fn: checkEnvironmentVariables },
+        { step: 2, fn: checkServerDeployment },
+        { step: 3, fn: checkWebhook },
+        { step: 4, fn: checkTestMessage },
+        { step: 5, fn: checkAuthorization },
+        { step: 6, fn: checkFileType },
+        { step: 7, fn: checkFileDownload },
+        { step: 8, fn: checkGitHubUpload },
+        { step: 9, fn: checkErrorHandling },
+      ];
+
+      for (const { step, fn } of checks) {
+        const result = await fn();
+        updateStatus(step, result.success, result.error);
+      }
+    }
 
     // Fetch and display logs
     async function fetchLogs() {
@@ -172,6 +293,9 @@
         logContainer.innerHTML = '<p class="error">Error fetching logs: ' + error.message + '</p>';
       }
     }
+
+    // Run checks on page load
+    window.onload = runChecks;
   </script>
 </body>
-</html>
+</html
