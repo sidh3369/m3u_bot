@@ -1,5 +1,23 @@
+
+
+
 const express = require('express');
 const dotenv = require('dotenv');
+
+async function assertGitHubTokenWorks() {
+  const r = await fetch('https://api.github.com/user', {
+    headers: {
+      Authorization: `Bearer ${GITHUB_TOKEN}`,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28'
+    },
+    signal: AbortSignal.timeout(5000)
+  });
+  if (r.status === 401) {
+    throw new Error('GitHub token is invalid or expired');
+  }
+}
+assertGitHubTokenWorks();
 
 // Load environment variables (for local dev)
 dotenv.config();
