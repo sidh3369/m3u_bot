@@ -221,7 +221,3 @@ async function setWebhook() {
 // Export for Vercel/Serverless
 module.exports = app;
 
-// 👇 Add this ONLY for Vercel export (not local dev)
-module.exports = app;
-module.exports = require('http').createServer(app);
-
