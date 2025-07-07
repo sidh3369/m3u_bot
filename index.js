@@ -1,3 +1,4 @@
+const logs = [];
 const express = require('express');
 const dotenv = require('dotenv');
 
@@ -119,10 +120,15 @@ if (!body.message.document) {
   }
 });
 
-// Logs viewer
 app.get('/logs', (req, res) => {
-  res.json(logs.slice(-10));
+  try {
+    res.setHeader('Content-Type', 'application/json');
+    res.status(200).json(logs.slice(-10));
+  } catch (err) {
+    res.status(500).send("Error reading logs");
+  }
 });
+
 
 // Helper: Send message via Telegram
 async function sendTelegramMessage(token, chat_id, text) {
