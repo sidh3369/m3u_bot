@@ -1,301 +1,126 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Telegram M3U Bot Checklist</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stremio Bot – Status & Logs</title>
   <style>
+    :root {
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      color-scheme: light dark;
+    }
     body {
-      font-family: Arial, sans-serif;
-      max-width: 800px;
-      margin: 20px auto;
-      padding: 20px;
-      background-color: #f5f5f5;
+      margin: 0;
+      padding: 1.25rem;
+      background: #f8fafc;
     }
-    h1, h2 {
-      color: #333;
-      text-align: center;
+    h1 {
+      margin-top: 0;
+      font-size: 1.6rem;
     }
-    .checklist, .logs {
-      background: white;
-      padding: 20px;
-      border-radius: 10px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-      margin-bottom: 20px;
+    .badge {
+      display: inline-block;
+      width: 0.75rem;
+      height: 0.75rem;
+      margin-right: 0.5rem;
+      border-radius: 50%;
+      background: #888;
     }
-    .item {
-      margin: 10px 0;
-      display: flex;
-      align-items: center;
-    }
-    .item input {
-      margin-right: 10px;
-    }
-    .item label {
-      font-size: 16px;
-      color: #444;
-    }
-    .note {
-      font-style: italic;
-      color: #666;
-      font-size: 14px;
-      margin-top: 5px;
-    }
-    .status {
-      margin-left: 20px;
-      font-weight: bold;
-      color: #d32f2f;
-    }
-    .success {
-      color: #2e7d32;
-    }
-    .log-entry {
-      font-size: 14px;
-      padding: 10px;
-      border-bottom: 1px solid #eee;
-    }
-    .log-entry.error {
-      color: #d32f2f;
-    }
-    button {
-      padding: 10px 20px;
-      background: #007bff;
-      color: white;
-      border: none;
-      border-radius: 5px;
+    #refresh {
+      margin-left: 0.75rem;
+      padding: 0.25rem 0.6rem;
+      font-size: 0.85rem;
       cursor: pointer;
     }
-    button:hover {
-      background: #0056b3;
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+      font-size: 0.9rem;
+    }
+    th, td {
+      border-bottom: 1px solid #d1d5db;
+      padding: 0.5rem;
+      text-align: left;
+      vertical-align: top;
+      word-break: break-word;
+    }
+    th { background: #f1f5f9; }
+    tr:last-child td { border-bottom: none; }
+    #error {
+      color: #dc2626;
+      margin-top: 1rem;
+      font-weight: 600;
     }
   </style>
 </head>
 <body>
-  <h1>Telegram M3U Bot Checklist</h1>
-  <div class="checklist">
-    <div class="item">
-      <input type="checkbox" id="step1" disabled>
-      <label for="step1">1. Environment Variables Set</label>
-      <span class="status" id="status1">Checking...</span>
-      <div class="note">Check Vercel dashboard for BOT_TOKEN, GITHUB_TOKEN, GITHUB_REPO, MY_ID, and WEBHOOK_URL.</div>
-    </div>
-    <div class="item">
-      <input type="checkbox" id="step2" disabled>
-      <label for="step2">2. Server Deploys</label>
-      <span class="status" id="status2">Checking...</span>
-      <div class="note">Push to GitHub; check Vercel dashboard for deployment success.</div>
-    </div>
-    <div class="item">
-      <input type="checkbox" id="step3" disabled>
-      <label for="step3">3. Webhook Set</label>
-      <span class="status" id="status3">Checking...</span>
-      <div class="note">Check logs or https://api.telegram.org/bot<BOT_TOKEN>/getWebhookInfo for success.</div>
-    </div>
-    <div class="item">
-      <input type="checkbox" id="step4" disabled>
-      <label for="step4">4. Send Test Message</label>
-      <span class="status" id="status4">Checking...</span>
-      <div class="note">Send a non-file message to bot; expect "No document" in logs or Telegram.</div>
-    </div>
-    <div class="item">
-      <input type="checkbox" id="step5" disabled>
-      <label for="step5">5. Test Authorization</label>
-      <span class="status" id="status5">Checking...</span>
-      <div class="note">Send M3U file from unauthorized user; expect "❌ Unauthorized user" in Telegram.</div>
-    </div>
-    <div class="item">
-      <input type="checkbox" id="step6" disabled>
-      <label for="step6">6. Test File Type</label>
-      <span class="status" id="status6">Checking...</span>
-      <div class="note">Send non-M3U file from allowed user; expect "❌ Only M3U files are allowed" in Telegram.</div>
-    </div>
-    <div class="item">
-      <input type="checkbox" id="step7" disabled>
-      <label for="step7">7. Telegram File Download</label>
-      <span class="status" id="status7">Checking...</span>
-      <div class="note">Send M3U file from allowed user; check logs for download errors.</div>
-    </div>
-    <div class="item">
-      <input type="checkbox" id="step8" disabled>
-      <label for="step8">8. GitHub Upload</label>
-      <span class="status" id="status8">Checking...</span>
-      <div class="note">Send M3U file; check GitHub repo for 1.m3u; expect "✅ Uploaded successfully" in Telegram.</div>
-    </div>
-    <div class="item">
-      <input type="checkbox" id="step9" disabled>
-      <label for="step9">9. Error Handling</label>
-      <span class="status" id="status9">Checking...</span>
-      <div class="note">Test with invalid BOT_TOKEN or GITHUB_TOKEN; expect "❌ Error" in Telegram and logs.</div>
-    </div>
-  </div>
+  <h1>
+    <span class="badge" id="badge"></span>
+    Stremio M3U Bot – Live Status
+    <button id="refresh">Refresh</button>
+  </h1>
 
-  <h2>Telegram Bot Logs</h2>
-  <div class="logs">
-    <button onclick="fetchLogs()">Fetch Logs</button>
-    <div id="logContainer"></div>
-  </div>
+  <section id="info">
+    <p>This page auto‑refreshes every <strong>5 seconds</strong> and shows the last 10 log entries from <code>/logs</code>.</p>
+  </section>
+
+  <table id="logTable" hidden>
+    <thead>
+      <tr>
+        <th style="width:9rem">Timestamp (IST)</th>
+        <th style="width:6rem">Type</th>
+        <th style="width:18rem">Message</th>
+        <th>Raw (JSON)</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <div id="error" hidden></div>
 
   <script>
-    // Update checklist status
-    function updateStatus(step, isSuccess, message = '') {
-      const checkbox = document.getElementById(`step${step}`);
-      const status = document.getElementById(`status${step}`);
-      if (isSuccess) {
-        checkbox.checked = true;
-        status.textContent = 'Checked - OK';
-        status.classList.add('success');
-      } else {
-        checkbox.checked = false;
-        status.textContent = `Error: ${message || 'Failed'}`;
-        status.classList.remove('success');
-      }
-    }
+    const badge = document.getElementById('badge');
+    const refreshBtn = document.getElementById('refresh');
+    const table = document.getElementById('logTable');
+    const tbody = table.querySelector('tbody');
+    const errorBox = document.getElementById('error');
 
-    // Mock API checks (replace with real API calls)
-    async function checkEnvironmentVariables() {
-      try {
-        // Replace with actual check (e.g., fetch from /api/env or server-side endpoint)
-        const response = await fetch('/api/check-env'); // Mock endpoint
-        const data = await response.json();
-        return data.success ? { success: true } : { success: false, error: data.error || 'Missing variables' };
-      } catch (error) {
-        return { success: false, error: error.message };
-      }
-    }
+    refreshBtn.addEventListener('click', fetchLogs);
 
-    async function checkServerDeployment() {
-      try {
-        // Replace with Vercel API call to check deployment status
-        const response = await fetch('/api/check-deployment'); // Mock endpoint
-        const data = await response.json();
-        return data.success ? { success: true } : { success: false, error: data.error || 'Deployment failed' };
-      } catch (error) {
-        return { success: false, error: error.message };
-      }
-    }
+    let timer = setInterval(fetchLogs, 5000);
+    fetchLogs(); // first run immediately
 
-    async function checkWebhook() {
-      try {
-        // Replace with Telegram API call: https://api.telegram.org/bot<BOT_TOKEN>/getWebhookInfo
-        const response = await fetch('/api/check-webhook'); // Mock endpoint
-        const data = await response.json();
-        return data.success ? { success: true } : { success: false, error: data.error || 'Webhook not set' };
-      } catch (error) {
-        return { success: false, error: error.message };
-      }
-    }
-
-    async function checkTestMessage() {
-      try {
-        // Simulate sending a test message and checking logs
-        const response = await fetch('/api/test-message'); // Mock endpoint
-        const data = await response.json();
-        return data.message === 'No document' ? { success: true } : { success: false, error: 'Unexpected response' };
-      } catch (error) {
-        return { success: false, error: error.message };
-      }
-    }
-
-    async function checkAuthorization() {
-      try {
-        // Simulate sending M3U from unauthorized user
-        const response = await fetch('/api/test-auth'); // Mock endpoint
-        const data = await response.json();
-        return data.message === '❌ Unauthorized user' ? { success: true } : { success: false, error: 'Authorization check failed' };
-      } catch (error) {
-        return { success: false, error: error.message };
-      }
-    }
-
-    async function checkFileType() {
-      try {
-        // Simulate sending non-M3U file
-        const response = await fetch('/api/test-file-type'); // Mock endpoint
-        const data = await response.json();
-        return data.message === '❌ Only M3U files are allowed' ? { success: true } : { success: false, error: 'File type check failed' };
-      } catch (error) {
-        return { success: false, error: error.message };
-      }
-    }
-
-    async function checkFileDownload() {
-      try {
-        // Simulate sending M3U and checking download
-        const response = await fetch('/api/test-download'); // Mock endpoint
-        const data = await response.json();
-        return data.success ? { success: true } : { success: false, error: data.error || 'Download failed' };
-      } catch (error) {
-        return { success: false, error: error.message };
-      }
-    }
-
-    async function checkGitHubUpload() {
-      try {
-        // Simulate GitHub upload check
-        const response = await fetch('/api/check-github-upload'); // Mock endpoint
-        const data = await response.json();
-        return data.message === '✅ Uploaded successfully' ? { success: true } : { success: false, error: 'Upload failed' };
-      } catch (error) {
-        return { success: false, error: error.message };
-      }
-    }
-
-    async function checkErrorHandling() {
-      try {
-        // Simulate invalid token scenario
-        const response = await fetch('/api/test-error-handling'); // Mock endpoint
-        const data = await response.json();
-        return data.message.includes('❌ Error') ? { success: true } : { success: false, error: 'Error handling failed' };
-      } catch (error) {
-        return { success: false, error: error.message };
-      }
-    }
-
-    // Run all checks on page load
-    async function runChecks() {
-      const checks = [
-        { step: 1, fn: checkEnvironmentVariables },
-        { step: 2, fn: checkServerDeployment },
-        { step: 3, fn: checkWebhook },
-        { step: 4, fn: checkTestMessage },
-        { step: 5, fn: checkAuthorization },
-        { step: 6, fn: checkFileType },
-        { step: 7, fn: checkFileDownload },
-        { step: 8, fn: checkGitHubUpload },
-        { step: 9, fn: checkErrorHandling },
-      ];
-
-      for (const { step, fn } of checks) {
-        const result = await fn();
-        updateStatus(step, result.success, result.error);
-      }
-    }
-
-    // Fetch and display logs
     async function fetchLogs() {
       try {
-        const response = await fetch('/logs');
-        const logs = await response.json();
-        const logContainer = document.getElementById('logContainer');
-        logContainer.innerHTML = '';
-        if (logs.length === 0) {
-          logContainer.innerHTML = '<p>No logs available.</p>';
-          return;
-        }
-        logs.forEach(log => {
-          const div = document.createElement('div');
-          div.className = 'log-entry' + (log.type === 'error' ? ' error' : '');
-          div.textContent = `[${log.timestamp}] ${log.type.toUpperCase()}: ${log.message}`;
-          logContainer.appendChild(div);
-        });
-      } catch (error) {
-        const logContainer = document.getElementById('logContainer');
-        logContainer.innerHTML = '<p class="error">Error fetching logs: ' + error.message + '</p>';
+        const res = await fetch('/logs', { cache: 'no-store' });
+        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+        const data = await res.json();
+
+        renderTable(data);
+        badge.style.background = '#16a34a'; // green
+        errorBox.hidden = true;
+      } catch (err) {
+        badge.style.background = '#dc2626'; // red
+        errorBox.textContent = 'Error fetching logs: ' + err.message;
+        errorBox.hidden = false;
       }
     }
 
-    // Run checks on page load
-    window.onload = runChecks;
+    function renderTable(logs) {
+      tbody.innerHTML = '';
+      logs.forEach(l => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${new Date(l.timestamp).toLocaleString('en-IN')}</td>
+          <td>${l.type}</td>
+          <td>${l.message}</td>
+          <td><pre style="margin:0;font-size:0.8rem;white-space:pre-wrap;">${(l.raw || '').replace(/</g,'&lt;')}</pre></td>
+        `;
+        tbody.appendChild(tr);
+      });
+      table.hidden = logs.length === 0;
+    }
   </script>
 </body>
-</html
+</html>
