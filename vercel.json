@@ -1,3 +1,4 @@
+// vercel.json  ⟵ overwrite your existing file
 {
   "version": 2,
   "builds": [
@@ -5,19 +6,8 @@
     { "src": "public/**", "use": "@vercel/static" }
   ],
   "routes": [
-    {
-      "src": "/webhook",
-      "methods": ["POST"],
-      "dest": "index.js"
-    },
-    {
-      "src": "/logs",
-      "methods": ["GET"],
-      "dest": "index.js"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "public/$1"
-    }
+    { "src": "/webhook", "methods": ["POST"], "dest": "/index.js" },
+    { "src": "/logs",    "methods": ["GET"],  "dest": "/index.js" },
+    { "src": "/(.*)", "dest": "/public/$1" }
   ]
 }
