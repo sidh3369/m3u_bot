@@ -30,9 +30,26 @@ app.post('/webhook', async (req, res) => {
   try {
     const body = req.body;
 
-    if (!body.message || !body.message.document) {
-      logs.push({ timestamp: new Date().toISOString(), type: 'info', message: 'No document in request' });
-      return res.status(200).send("No document");
+    if (!body.message) {
+  logs.push({ timestamp: new Date().toISOString(), type: 'info', message: 'No message in request' });
+  return res.status(200).send("No message");
+}
+
+const chatId = body.message.chat.id;
+const userId = body.message.from?.id?.toString();
+const text = body.message.text;
+
+if (text === '/start') {
+  logs.push({ timestamp: new Date().toISOString(), type: 'info', message: `Start command from ${userId}` });
+  await sendTelegramMessage(BOT_TOKEN, chatId, "👋 Welcome! Send me an .m3u file and I will upload it to GitHub.");
+  return res.status(200).send("Start command handled");
+}
+
+if (!body.message.document) {
+  logs.push({ timestamp: new Date().toISOString(), type: 'info', message: 'No document in message' });
+  return res.status(200).send("No document");
+}
+
     }
 
     const userId = body.message.from?.id?.toString();
