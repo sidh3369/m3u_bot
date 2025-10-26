@@ -1,126 +1,371 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Stremio Bot – Status & Logs</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Stremio M3U Bot — Real-time Monitoring</title>
+
+  <!-- Chart.js (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
   <style>
-    :root {
-      font-family: ui-sans-serif, system-ui, sans-serif;
-      color-scheme: light dark;
+    :root{
+      --bg:#0f1724; --card:#0b1220; --muted:#9ca3af; --accent:#3b82f6; --ok:#16a34a; --err:#dc2626;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      color-scheme: dark;
     }
-    body {
-      margin: 0;
-      padding: 1.25rem;
-      background: #f8fafc;
-    }
-    h1 {
-      margin-top: 0;
-      font-size: 1.6rem;
-    }
-    .badge {
-      display: inline-block;
-      width: 0.75rem;
-      height: 0.75rem;
-      margin-right: 0.5rem;
-      border-radius: 50%;
-      background: #888;
-    }
-    #refresh {
-      margin-left: 0.75rem;
-      padding: 0.25rem 0.6rem;
-      font-size: 0.85rem;
-      cursor: pointer;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 1rem;
-      font-size: 0.9rem;
-    }
-    th, td {
-      border-bottom: 1px solid #d1d5db;
-      padding: 0.5rem;
-      text-align: left;
-      vertical-align: top;
-      word-break: break-word;
-    }
-    th { background: #f1f5f9; }
-    tr:last-child td { border-bottom: none; }
-    #error {
-      color: #dc2626;
-      margin-top: 1rem;
-      font-weight: 600;
-    }
+    html,body{height:100%; margin:0; background:linear-gradient(180deg,#071029 0%, #031024 100%); color:#e6eef8;}
+    .wrap{max-width:1200px;margin:18px auto;padding:18px;gap:12px;display:flex;flex-direction:column;}
+    header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    h1{margin:0;font-size:20px;display:flex;align-items:center;gap:10px}
+    .badge{width:12px;height:12px;border-radius:999px;background:var(--muted);box-shadow:0 0 8px rgba(0,0,0,0.4)}
+    .controls button{margin-left:8px;padding:8px 10px;border-radius:8px;border:0;background:#0f1724;color:#e6eef8;cursor:pointer;border:1px solid rgba(255,255,255,0.04)}
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border:1px solid rgba(255,255,255,0.03);padding:14px;border-radius:10px;min-height:88px}
+    .card h2{margin:0;font-size:13px;color:#cfe6ff}
+    .meta{margin-top:8px;font-size:13px;color:var(--muted);line-height:1.45}
+    .full{grid-column:1/-1}
+    .small{font-size:12px;color:var(--muted)}
+    table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+    th,td{padding:8px;border-bottom:1px solid rgba(255,255,255,0.03);text-align:left;color:#dbeafe}
+    th{color:#93c5fd;font-size:12px}
+    pre{white-space:pre-wrap;font-size:12px;color:#cbd5e1;margin:0}
+    .muted{color:var(--muted)}
+    .charts{display:flex;gap:12px;margin-top:12px}
+    canvas{background:transparent;border-radius:8px}
+    .history-list{max-height:240px;overflow:auto}
+    .log-list{max-height:360px;overflow:auto}
+    @media (max-width:980px){ .grid{grid-template-columns:repeat(2,1fr)} }
+    @media (max-width:640px){ .grid{grid-template-columns:1fr} header{flex-direction:column;align-items:flex-start} .controls{width:100%;display:flex;justify-content:flex-end} }
   </style>
 </head>
 <body>
-  <h1>
-    <span class="badge" id="badge"></span>
-    Stremio M3U Bot – Live Status
-    <button id="refresh">Refresh</button>
-  </h1>
+  <div class="wrap">
+    <header>
+      <h1>
+        <span class="badge" id="connBadge"></span>
+        Stremio M3U Bot — Real-time Monitoring
+        <small class="small" style="margin-left:8px" id="versionLabel"></small>
+      </h1>
 
-  <section id="info">
-    <p>This page auto‑refreshes every <strong>5 seconds</strong> and shows the last 10 log entries from <code>/logs</code>.</p>
-  </section>
+      <div class="controls">
+        <button id="btnRefresh">Refresh</button>
+        <button id="btnRebuild">Force Rebuild</button>
+        <button id="btnRestart">Restart Bot</button>
+        <button id="btnClearLogs">Clear Logs</button>
+      </div>
+    </header>
 
-  <table id="logTable" hidden>
-    <thead>
-      <tr>
-        <th style="width:9rem">Timestamp (IST)</th>
-        <th style="width:6rem">Type</th>
-        <th style="width:18rem">Message</th>
-        <th>Raw (JSON)</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+    <!-- Top stats -->
+    <div class="grid">
+      <div class="card">
+        <h2>Bot Status</h2>
+        <div class="meta" id="botStatus">—</div>
+      </div>
 
-  <div id="error" hidden></div>
+      <div class="card">
+        <h2>Current M3U File</h2>
+        <div class="meta" id="fileInfo">—</div>
+      </div>
 
-  <script>
-    const badge = document.getElementById('badge');
-    const refreshBtn = document.getElementById('refresh');
-    const table = document.getElementById('logTable');
-    const tbody = table.querySelector('tbody');
-    const errorBox = document.getElementById('error');
+      <div class="card">
+        <h2>Quick Metrics</h2>
+        <div class="meta" id="quickMetrics">—</div>
+      </div>
 
-    refreshBtn.addEventListener('click', fetchLogs);
+      <div class="card full">
+        <h2>System Performance (real-time)</h2>
+        <div class="charts">
+          <canvas id="cpuChart" width="400" height="100"></canvas>
+          <canvas id="memChart" width="400" height="100"></canvas>
+        </div>
+      </div>
 
-    let timer = setInterval(fetchLogs, 5000);
-    fetchLogs(); // first run immediately
+      <div class="card">
+        <h2>Upload History (last 10)</h2>
+        <div class="history-list" id="historyList">
+          <table id="historyTable">
+            <thead><tr><th>File</th><th>Size</th><th>Uploaded</th><th>Items</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
 
-    async function fetchLogs() {
-      try {
-        const res = await fetch('/logs', { cache: 'no-store' });
-        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-        const data = await res.json();
+      <div class="card">
+        <h2>Top 5 Preview</h2>
+        <div id="previewList" class="meta">—</div>
+      </div>
 
-        renderTable(data);
-        badge.style.background = '#16a34a'; // green
-        errorBox.hidden = true;
-      } catch (err) {
-        badge.style.background = '#dc2626'; // red
-        errorBox.textContent = 'Error fetching logs: ' + err.message;
-        errorBox.hidden = false;
+      <div class="card full">
+        <h2>Recent Logs</h2>
+        <div class="log-list" id="logList">
+          <table id="logsTable">
+            <thead><tr><th>Time</th><th>Level</th><th>Message</th><th>Raw</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:10px;color:var(--muted);font-size:12px">
+      Connection: <span id="connMode">—</span> — <span id="lastUpdate">Last update: —</span>
+    </div>
+  </div>
+
+<script>
+/* -------------------------
+  CONFIG
+  - WS_URL: websocket address (wss:// preferred for production)
+  - POLL_INTERVAL: fallback polling interval (ms)
+---------------------------*/
+const WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws'; // adjust if ws served on different path
+const POLL_INTERVAL = 5000;
+
+/* DOM refs */
+const connBadge = document.getElementById('connBadge');
+const connMode = document.getElementById('connMode');
+const lastUpdate = document.getElementById('lastUpdate');
+const botStatus = document.getElementById('botStatus');
+const fileInfo = document.getElementById('fileInfo');
+const quickMetrics = document.getElementById('quickMetrics');
+const previewList = document.getElementById('previewList');
+const logsTableBody = document.querySelector('#logsTable tbody');
+const historyTableBody = document.querySelector('#historyTable tbody');
+const versionLabel = document.getElementById('versionLabel');
+
+const btnRefresh = document.getElementById('btnRefresh');
+const btnRebuild = document.getElementById('btnRebuild');
+const btnRestart = document.getElementById('btnRestart');
+const btnClearLogs = document.getElementById('btnClearLogs');
+
+/* Charts setup */
+const cpuCtx = document.getElementById('cpuChart').getContext('2d');
+const memCtx = document.getElementById('memChart').getContext('2d');
+const CPU_BUF = { labels: [], data: [] };
+const MEM_BUF = { labels: [], data: [] };
+
+const cpuChart = new Chart(cpuCtx, {
+  type: 'line',
+  data: { labels: CPU_BUF.labels, datasets: [{ label:'CPU %', data: CPU_BUF.data, fill:false, tension:0.25 }] },
+  options: { responsive:true, maintainAspectRatio:false, scales:{ y: { min:0, max:100 }}}
+});
+const memChart = new Chart(memCtx, {
+  type: 'line',
+  data: { labels: MEM_BUF.labels, datasets: [{ label:'Memory %', data: MEM_BUF.data, fill:false, tension:0.25 }] },
+  options: { responsive:true, maintainAspectRatio:false, scales:{ y: { min:0, max:100 }}}
+});
+
+/* WebSocket + fallback */
+let ws = null;
+let pollTimer = null;
+
+function setConnected(yes, mode='WS') {
+  connBadge.style.background = yes ? 'var(--ok)' : 'var(--err)';
+  connMode.textContent = (yes ? 'Connected' : 'Disconnected') + ' (' + mode + ')';
+}
+
+function connectWebSocket() {
+  try {
+    ws = new WebSocket(WS_URL);
+    ws.addEventListener('open', () => {
+      setConnected(true, 'WS');
+      connMode.title = 'Receiving live updates via WebSocket';
+      // cancel polling if any
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      // optionally request initial state
+      ws.send(JSON.stringify({ type: 'hello', ts: Date.now() }));
+    });
+
+    ws.addEventListener('message', ev => {
+      const payload = safeParse(ev.data);
+      if (!payload) return;
+      lastUpdate.textContent = 'Last update: ' + new Date().toLocaleString('en-IN');
+      // dispatch by type
+      switch (payload.type) {
+        case 'status': applyStatus(payload.data); break;
+        case 'file': applyFile(payload.data); break;
+        case 'sys': applySys(payload.data); break;
+        case 'logs': applyLogs(payload.data); break;
+        case 'history': applyHistory(payload.data); break;
+        case 'preview': applyPreview(payload.data); break;
+        case 'metrics': applyMetrics(payload.data); break;
+        default: console.debug('ws unknown', payload.type); break;
       }
-    }
+    });
 
-    function renderTable(logs) {
-      tbody.innerHTML = '';
-      logs.forEach(l => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${new Date(l.timestamp).toLocaleString('en-IN')}</td>
-          <td>${l.type}</td>
-          <td>${l.message}</td>
-          <td><pre style="margin:0;font-size:0.8rem;white-space:pre-wrap;">${(l.raw || '').replace(/</g,'&lt;')}</pre></td>
-        `;
-        tbody.appendChild(tr);
-      });
-      table.hidden = logs.length === 0;
-    }
-  </script>
+    ws.addEventListener('close', () => {
+      setConnected(false, 'WS');
+      // fallback to polling
+      startPolling();
+      // attempt reconnect after backoff
+      setTimeout(connectWebSocket, 3000);
+    });
+
+    ws.addEventListener('error', (e) => {
+      console.warn('WS error', e);
+      ws.close();
+    });
+  } catch (err) {
+    console.error('WS connect failed', err);
+    setConnected(false, 'WS');
+    startPolling();
+  }
+}
+
+/* Polling fallback */
+function startPolling() {
+  if (pollTimer) return;
+  connMode.title = 'Polling endpoints every ' + (POLL_INTERVAL/1000) + 's';
+  setConnected(false, 'POLL');
+  poll(); // immediate
+  pollTimer = setInterval(poll, POLL_INTERVAL);
+}
+
+async function poll() {
+  try {
+    const [s,f,h,l,sys,preview] = await Promise.all([
+      fetchJson('/status'),
+      fetchJson('/fileinfo'),
+      fetchJson('/history'),
+      fetchJson('/logs'),
+      fetchJson('/sysinfo'),
+      fetchJson('/preview')
+    ]);
+    if (s) applyStatus(s);
+    if (f) applyFile(f);
+    if (h) applyHistory(h);
+    if (l) applyLogs(l);
+    if (sys) applySys(sys);
+    if (preview) applyPreview(preview);
+    lastUpdate.textContent = 'Last update: ' + new Date().toLocaleString('en-IN');
+  } catch (err) {
+    console.warn('Poll error', err);
+  }
+}
+
+/* APPLY functions */
+function applyStatus(data) {
+  versionLabel.textContent = data.version ? 'v' + data.version : '';
+  botStatus.innerHTML = `
+    <div><strong>Active:</strong> ${data.active ? 'Online' : 'Offline'}</div>
+    <div class="small"><strong>Uptime:</strong> ${data.uptime || '—'} &nbsp; <strong>PID:</strong> ${data.pid || '—'}</div>
+    <div class="small"><strong>Ping:</strong> ${data.ping != null ? data.ping + ' ms' : '—'}</div>
+    <div class="small"><strong>API latency:</strong> ${data.apiLatency != null ? data.apiLatency + ' ms' : '—'}</div>
+  `;
+  connBadge.style.background = data.active ? 'var(--ok)' : 'var(--err)';
+}
+
+function applyFile(d) {
+  const uploaded = d.uploaded ? new Date(d.uploaded).toLocaleString('en-IN') : '—';
+  fileInfo.innerHTML = `
+    <div><strong>Name:</strong> ${escapeHtml(d.name || '1.m3u')}</div>
+    <div class="small"><strong>Size:</strong> ${formatBytes(d.size)}</div>
+    <div class="small"><strong>Uploaded:</strong> ${uploaded}</div>
+    <div class="small"><strong>Items:</strong> ${d.items ?? '—'}</div>
+    <div class="small"><strong>SHA256:</strong> ${d.sha256 || '—'}</div>
+  `;
+  quickMetrics.innerHTML = `
+    <div><strong>File size:</strong> ${formatBytes(d.size)}</div>
+    <div class="small"><strong>Items:</strong> ${d.items ?? '—'}</div>
+    <div class="small"><strong>Active streams:</strong> ${d.activeStreams ?? '—'}</div>
+  `;
+}
+
+function applySys(s) {
+  const mem = s.memory != null ? s.memory + '%' : '—';
+  const cpu = s.cpu != null ? s.cpu + '%' : '—';
+  document.getElementById('sysInfo')?.remove?.(); // keep DOM tidy if needed
+  // update charts
+  pushMetric(cpuNumeric(s.cpu), memNumeric(s.memory));
+  // show small quick info
+  document.querySelector('#quickMetrics').innerHTML += `<div class="small"><strong>CPU:</strong> ${cpu} <strong>Mem:</strong> ${mem}</div>`;
+}
+
+function applyLogs(logs) {
+  logsTableBody.innerHTML = '';
+  logs.forEach(l => {
+    const tr = document.createElement('tr');
+    const time = new Date(l.timestamp).toLocaleString('en-IN');
+    tr.innerHTML = `<td>${time}</td><td>${escapeHtml(l.type)}</td><td>${escapeHtml(l.message)}</td><td><pre>${escapeHtml(l.raw || '')}</pre></td>`;
+    logsTableBody.appendChild(tr);
+  });
+}
+
+function applyHistory(list) {
+  historyTableBody.innerHTML = '';
+  list.forEach(f => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${escapeHtml(f.name)}</td><td>${formatBytes(f.size)}</td><td>${new Date(f.uploaded).toLocaleString('en-IN')}</td><td>${f.items ?? '—'}</td>`;
+    historyTableBody.appendChild(tr);
+  });
+}
+
+function applyPreview(items) {
+  if (!Array.isArray(items) || items.length === 0) { previewList.innerHTML = '<div class="small">Empty</div>'; return; }
+  // top-5 nicely
+  previewList.innerHTML = items.slice(0,5).map((it,idx) => `<div class="small">${idx+1}. ${escapeHtml(it.title || it.name || it.uri)}</div>`).join('');
+}
+
+function applyMetrics(m) {
+  // optional: graph of requests or tasks per minute
+  // Using CPU/MEM already handled in applySys
+}
+
+/* Helpers */
+function pushMetric(cpu, mem) {
+  const t = new Date().toLocaleTimeString('en-IN');
+  if (CPU_BUF.labels.length >= 20) { CPU_BUF.labels.shift(); CPU_BUF.data.shift(); MEM_BUF.labels.shift(); MEM_BUF.data.shift(); }
+  CPU_BUF.labels.push(t); CPU_BUF.data.push(cpu); MEM_BUF.labels.push(t); MEM_BUF.data.push(mem);
+  cpuChart.update(); memChart.update();
+}
+
+function cpuNumeric(v){ return typeof v === 'number' ? Math.min(100, Math.max(0, Math.round(v))) : 0; }
+function memNumeric(v){ return typeof v === 'number' ? Math.min(100, Math.max(0, Math.round(v))) : 0; }
+
+function formatBytes(bytes) {
+  if (!bytes && bytes !== 0) return '—';
+  const units = ['B','KB','MB','GB','TB'];
+  let i = 0; let val = bytes;
+  while (val >= 1024 && i < units.length-1) { val /= 1024; i++; }
+  return val.toFixed(2) + ' ' + units[i];
+}
+
+function escapeHtml(s){ if (s == null) return ''; return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function safeParse(str){ try { return typeof str === 'object' ? str : JSON.parse(str); } catch(e){ return null; } }
+
+async function fetchJson(url, opts={}) {
+  try {
+    const r = await fetch(url, Object.assign({cache:'no-store'}, opts));
+    if (!r.ok) return null;
+    return await r.json();
+  } catch(e) { return null; }
+}
+
+/* Control buttons — POSTs to endpoints. Important: require backend auth (see notes) */
+btnRefresh.addEventListener('click', () => {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type:'command', cmd:'refresh' }));
+  else fetch('/control/refresh', {method:'POST'}).catch(()=>alert('Refresh failed'));
+});
+btnRebuild.addEventListener('click', ()=> {
+  if (!confirm('Force rebuild playlist now?')) return;
+  fetch('/control/rebuild', {method:'POST'}).then(()=> alert('Rebuild requested')).catch(()=>alert('Request failed'));
+});
+btnRestart.addEventListener('click', ()=> {
+  if (!confirm('Restart bot now?')) return;
+  fetch('/control/restart', {method:'POST'}).then(()=> alert('Restart requested')).catch(()=>alert('Request failed'));
+});
+btnClearLogs.addEventListener('click', ()=> {
+  if (!confirm('Clear logs?')) return;
+  fetch('/control/clearlogs', {method:'POST'}).then(()=> alert('Logs cleared')).catch(()=>alert('Request failed'));
+});
+
+/* START: connect ws or poll */
+connectWebSocket();
+
+/* At page unload, close ws politely */
+window.addEventListener('beforeunload', ()=> { if (ws) ws.close(); });
+
+</script>
 </body>
 </html>
