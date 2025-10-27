@@ -1,5 +1,13 @@
 const express = require('express');
 const dotenv = require('dotenv');
+const path = require('path');
+
+// ✅ Serve your dashboard HTML from /public folder
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 // Load env variables
 dotenv.config();
