@@ -170,6 +170,55 @@ async function githubFetch(url, options = {}) {
   }
   return response;
 }
+..// --- NEW: Status endpoint ---
+app.get("/status", (req, res) => {
+  res.json({
+    version: "1.0.0",
+    active: true,
+    uptime: process.uptime().toFixed(0) + "s",
+    pid: process.pid,
+    ping: Math.floor(Math.random() * 50) + 10,
+    apiLatency: Math.floor(Math.random() * 100) + 10
+  });
+});
+
+// --- NEW: File info ---
+app.get("/fileinfo", (req, res) => {
+  res.json({
+    name: "1.m3u",
+    size: 102400,
+    uploaded: new Date().toISOString(),
+    items: 50,
+    sha256: "dummyhash123456",
+    activeStreams: 3
+  });
+});
+
+// --- NEW: System info ---
+app.get("/sysinfo", (req, res) => {
+  const cpu = (Math.random() * 100).toFixed(2);
+  const memory = (Math.random() * 100).toFixed(2);
+  res.json({ cpu, memory });
+});
+
+// --- NEW: History ---
+app.get("/history", (req, res) => {
+  res.json([
+    { name: "1.m3u", size: 1048576, uploaded: new Date().toISOString(), items: 60 },
+    { name: "old.m3u", size: 524288, uploaded: new Date(Date.now() - 86400000).toISOString(), items: 45 }
+  ]);
+});
+
+// --- NEW: Preview ---
+app.get("/preview", (req, res) => {
+  res.json([
+    { title: "Movie One" },
+    { title: "Movie Two" },
+    { title: "Show Three" },
+    { title: "Stream Four" },
+    { title: "Documentary Five" }
+  ]);
+});
 
 // For Vercel export
 module.exports = app;
