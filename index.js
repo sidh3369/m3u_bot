@@ -273,6 +273,29 @@ if (data.startsWith('overwrite_')) {
     await sendTelegramMessage(BOT_TOKEN, chatId, `❌ Failed overwrite ${fileName}: ${err.message}`);
   }
 }
+if (text === '/uploadserver') {
+  logs.push({ timestamp: new Date().toISOString(), type: 'info', message: `Upload to server command from ${userId}` });
+  await sendTelegramMessage(BOT_TOKEN, chatId, "📂 Fetching videos from Seedr.cc...");
+  
+  try {
+    const files = await fetchSeedrVideos(process.env.SEEDR_TOKEN);
+    if (!files.length) {
+      await sendTelegramMessage(BOT_TOKEN, chatId, "⚠️ No downloadable videos found in your Seedr.");
+      return res.status(200).send("No videos found");
+    }
+
+    let msg = "Found these files:\n";
+    files.forEach((f, i) => { msg += `${i+1}. ${f.name}\n`; });
+    msg += "\nDo you want to upload all to your server? Reply YES or NO.";
+    
+    await sendTelegramMessage(BOT_TOKEN, chatId, msg);
+    uploadQueue[userId] = files; // store temporarily
+  } catch (err) {
+    await sendTelegramMessage(BOT_TOKEN, chatId, `❌ Error fetching Seedr files: ${err.message}`);
+  }
+
+  return res.status(200).send("Upload command processed");
+}
 
 
 // ✅ Export app for Vercel
