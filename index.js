@@ -2,351 +2,192 @@
 const express = require('express');
 const dotenv = require('dotenv');
 const path = require('path');
-const uploadQueue = {};
-dotenv.config(); // ✅ Load env FIRST
+dotenv.config();
 
 const app = express();
 app.use(express.json());
-
-// ✅ Serve your dashboard HTML
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// --- LOG STORAGE ---
 const logs = [];
+const uploadQueue = {};
 
-// --- ENVIRONMENT VARIABLES ---
-const { BOT_TOKEN, GITHUB_TOKEN, GITHUB_REPO, MY_ID, WEBHOOK_URL } = process.env;
+// ENV
+const { BOT_TOKEN, GITHUB_TOKEN, GITHUB_REPO, MY_ID, WEBHOOK_URL, SEEDR_TOKEN, UPLOAD_URL, UPLOAD_KEY, CHECK_URL } = process.env;
 
-// Log a warning instead of crashing if missing
-if (!BOT_TOKEN || !GITHUB_TOKEN || !GITHUB_REPO || !MY_ID || !WEBHOOK_URL) {
-  const warning = "⚠️ Missing one or more environment variables (BOT_TOKEN, GITHUB_TOKEN, GITHUB_REPO, MY_ID, WEBHOOK_URL)";
-  console.warn(warning);
-  logs.push({ timestamp: new Date().toISOString(), type: 'warn', message: warning });
+if (!BOT_TOKEN || !GITHUB_TOKEN || !GITHUB_REPO || !MY_ID) {
+  console.warn('⚠️ Missing one or more environment variables!');
 }
 
-// --- TELEGRAM / GITHUB HANDLER ---
+// ✅ ALLOWED USER IDS
 const ALLOWED_USER_IDS = (MY_ID || '').split(',').map(id => id.trim());
 
+// ========== TELEGRAM WEBHOOK HANDLER ==========
 app.post('/webhook', async (req, res) => {
   const fetch = (await import('node-fetch')).default;
-  logs.push({
-    timestamp: new Date().toISOString(),
-    type: 'info',
-    message: 'Webhook triggered',
-    raw: JSON.stringify(req.body)
-  });
+  const body = req.body;
+  if (!body.message) return res.status(200).send('No message');
+
+  const chatId = body.message.chat.id;
+  const userId = body.message.from?.id?.toString();
+  const text = body.message.text;
+  const document = body.message.document;
+  const callback = body.callback_query?.data;
 
   try {
-    const body = req.body;
-    if (!body.message) return res.status(200).send("No message");
-
-    const chatId = body.message.chat.id;
-    const userId = body.message.from?.id?.toString();
-    const text = body.message.text;
-
+    // --- Start command ---
     if (text === '/start') {
-      await sendTelegramMessage(BOT_TOKEN, chatId, "👋 Welcome! Send me an .m3u file and I will upload it to GitHub.");
-      return res.status(200).send("Start command handled");
+      await sendTelegramMessage(BOT_TOKEN, chatId, '👋 Welcome! Send an .m3u file or use /uploadserver to upload videos from Seedr.cc');
+      return res.status(200).send('OK');
     }
 
-    if (!body.message.document)
-      return res.status(200).send("No document");
+    // --- Upload .m3u to GitHub ---
+    if (document && document.file_name.toLowerCase().endsWith('.m3u')) {
+      if (!ALLOWED_USER_IDS.includes(userId)) {
+        await sendTelegramMessage(BOT_TOKEN, chatId, '❌ Unauthorized user.');
+        return res.status(200).send('Unauthorized');
+      }
 
-    if (!ALLOWED_USER_IDS.includes(userId)) {
-      await sendTelegramMessage(BOT_TOKEN, chatId, "❌ Unauthorized user.");
-      logs.push({ timestamp: new Date().toISOString(), type: 'error', message: `Unauthorized user: ${userId}` });
-      return res.status(200).send("Unauthorized user");
+      const fileId = document.file_id;
+      const fileInfoResp = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${fileId}`);
+      const fileInfo = await fileInfoResp.json();
+      if (!fileInfo.ok) throw new Error('Telegram getFile failed');
+
+      const fileUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${fileInfo.result.file_path}`;
+      const fileResp = await fetch(fileUrl);
+      if (!fileResp.ok) throw new Error('Failed to download file');
+
+      const fileBuffer = await fileResp.arrayBuffer();
+      const base64Content = Buffer.from(new Uint8Array(fileBuffer)).toString('base64');
+      const sha = await getGitHubFileSha(GITHUB_REPO, GITHUB_TOKEN, '1.m3u');
+
+      const uploadResp = await githubFetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/1.m3u`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          message: 'Update 1.m3u via Telegram bot',
+          content: base64Content,
+          ...(sha ? { sha } : {})
+        })
+      });
+
+      const result = await uploadResp.json();
+      if (!uploadResp.ok) throw new Error(result.message || 'GitHub upload failed');
+
+      await sendTelegramMessage(BOT_TOKEN, chatId, `✅ Uploaded successfully!\n\n📂 https://raw.githubusercontent.com/${GITHUB_REPO}/main/1.m3u`);
+      logs.push({ type: 'info', message: 'File uploaded successfully' });
+      return res.status(200).send('OK');
     }
 
-    const fileId = body.message.document.file_id;
-    const fileName = body.message.document.file_name || "unknown.m3u";
-    if (!fileName.toLowerCase().endsWith(".m3u")) {
-      await sendTelegramMessage(BOT_TOKEN, chatId, "❌ Only M3U files are allowed.");
-      logs.push({ timestamp: new Date().toISOString(), type: 'error', message: `Invalid file type: ${fileName}` });
-      return res.status(200).send("Invalid file type");
+    // --- Upload videos from Seedr ---
+    if (text === '/uploadserver') {
+      await sendTelegramMessage(BOT_TOKEN, chatId, '📂 Fetching videos from Seedr.cc...');
+      const files = await fetchSeedrVideos(SEEDR_TOKEN);
+      if (!files.length) {
+        await sendTelegramMessage(BOT_TOKEN, chatId, '⚠️ No downloadable videos found in Seedr.');
+        return res.status(200).send('No videos');
+      }
+
+      uploadQueue[userId] = files;
+      let msg = `Found ${files.length} videos:\n`;
+      files.forEach((f, i) => { msg += `${i + 1}. ${f.name}\n`; });
+      msg += '\nDo you want to upload all to your server? Reply YES or NO.';
+      await sendTelegramMessage(BOT_TOKEN, chatId, msg);
+      return res.status(200).send('Upload ready');
     }
 
-    const fileInfoResp = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${fileId}`);
-    const fileInfo = await fileInfoResp.json();
-    if (!fileInfo.ok) throw new Error("Telegram file path fetch failed");
+    // --- User confirms upload ---
+    if (uploadQueue[userId] && text && text.toLowerCase() === 'yes') {
+      const files = uploadQueue[userId];
+      delete uploadQueue[userId];
+      await sendTelegramMessage(BOT_TOKEN, chatId, `📤 Uploading ${files.length} videos to server...`);
 
-    const fileUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${fileInfo.result.file_path}`;
-    const fileResp = await fetch(fileUrl);
-    if (!fileResp.ok) throw new Error("Failed to download file");
+      for (const f of files) {
+        try {
+          const r = await fetch(UPLOAD_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              key: UPLOAD_KEY,
+              video_url: f.url,
+              name: f.name
+            })
+          });
 
-    const fileBuffer = await fileResp.arrayBuffer();
-    const base64Content = Buffer.from(new Uint8Array(fileBuffer)).toString("base64");
-    const sha = await getGitHubFileSha(GITHUB_REPO, GITHUB_TOKEN, "1.m3u");
-
-    const uploadResp = await githubFetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/1.m3u`, {
-      method: "PUT",
-      body: JSON.stringify({
-        message: "Update 1.m3u via Telegram bot",
-        content: base64Content,
-        ...(sha ? { sha } : {})
-      })
-    });
-
-    const uploadResult = await uploadResp.json();
-    if (!uploadResp.ok) throw new Error(uploadResult.message || "GitHub upload failed");
-
-    await sendTelegramMessage(BOT_TOKEN, chatId, `✅ Uploaded successfully.\nhttps://raw.githubusercontent.com/${GITHUB_REPO}/main/1.m3u`);
-    logs.push({ timestamp: new Date().toISOString(), type: 'info', message: 'File uploaded successfully' });
-
-    return res.status(200).send("OK");
-  } catch (error) {
-    logs.push({ timestamp: new Date().toISOString(), type: 'error', message: error.message });
-    console.error("Bot error:", error.message);
-    if (req.body?.message?.chat?.id) {
-      await sendTelegramMessage(BOT_TOKEN, req.body.message.chat.id, `❌ Error: ${error.message}`);
+          if (!r.ok) throw new Error(await r.text());
+          await sendTelegramMessage(BOT_TOKEN, chatId, `✅ ${f.name} uploaded.`);
+        } catch (err) {
+          await sendTelegramMessage(BOT_TOKEN, chatId, `❌ Failed ${f.name}: ${err.message}`);
+        }
+      }
+      await sendTelegramMessage(BOT_TOKEN, chatId, '🎉 All uploads complete.');
+      return res.status(200).send('Done');
     }
-    return res.status(500).send("Error");
+
+    return res.status(200).send('OK');
+  } catch (e) {
+    console.error('Bot error:', e);
+    logs.push({ type: 'error', message: e.message });
+    await sendTelegramMessage(BOT_TOKEN, chatId, `❌ Error: ${e.message}`);
+    return res.status(500).send('Error');
   }
 });
 
-// --- DASHBOARD ROUTES ---
-app.get("/logs", (req, res) => {
-  res.json(logs.slice(-10));
-});
+// ========== API for Dashboard ==========
+app.get('/logs', (req, res) => res.json(logs.slice(-20)));
+app.get('/status', (req, res) => res.json({ version: '1.0.0', uptime: process.uptime().toFixed(0) + 's' }));
 
-app.get("/status", (req, res) => {
-  res.json({
-    version: "1.0.0",
-    active: true,
-    uptime: process.uptime().toFixed(0) + "s",
-    pid: process.pid,
-    ping: Math.floor(Math.random() * 50) + 10,
-    apiLatency: Math.floor(Math.random() * 100) + 10
-  });
-});
-
-app.get("/fileinfo", (req, res) => {
-  res.json({
-    name: "1.m3u",
-    size: 102400,
-    uploaded: new Date().toISOString(),
-    items: 50,
-    sha256: "dummyhash123456",
-    activeStreams: 3
-  });
-});
-
-app.get("/sysinfo", (req, res) => {
-  const cpu = (Math.random() * 100).toFixed(2);
-  const memory = (Math.random() * 100).toFixed(2);
-  res.json({ cpu, memory });
-});
-
-app.get("/history", (req, res) => {
-  res.json([
-    { name: "1.m3u", size: 1048576, uploaded: new Date().toISOString(), items: 60 },
-    { name: "old.m3u", size: 524288, uploaded: new Date(Date.now() - 86400000).toISOString(), items: 45 }
-  ]);
-});
-
-app.get("/preview", (req, res) => {
-  res.json([
-    { title: "Movie One" },
-    { title: "Movie Two" },
-    { title: "Show Three" },
-    { title: "Stream Four" },
-    { title: "Documentary Five" }
-  ]);
-});
-
-// --- HELPER FUNCTIONS ---
+// ========== Helper Functions ==========
 async function sendTelegramMessage(token, chat_id, text) {
   const fetch = (await import('node-fetch')).default;
-  const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
+  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ chat_id, text })
   });
-  const result = await response.json();
-  if (!result.ok) {
-    const error = `Telegram send failed: ${result.description || "Unknown error"}`;
-    logs.push({ timestamp: new Date().toISOString(), type: 'error', message: error });
-    throw new Error(error);
-  }
 }
 
 async function getGitHubFileSha(repo, token, path) {
-  try {
-    const resp = await githubFetch(`https://api.github.com/repos/${repo}/contents/${path}`);
-    const data = await resp.json();
-    return data.sha || null;
-  } catch {
-    logs.push({ timestamp: new Date().toISOString(), type: 'info', message: `No existing file at ${path}` });
-    return null;
-  }
+  const fetch = (await import('node-fetch')).default;
+  const res = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.sha || null;
 }
 
-async function githubFetch(url, options = {}) {
+async function githubFetch(url, options) {
   const fetch = (await import('node-fetch')).default;
-  const response = await fetch(url, {
+  return fetch(url, {
     ...options,
     headers: {
       Authorization: `Bearer ${GITHUB_TOKEN}`,
       Accept: 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-      ...(options.headers || {})
+      'X-GitHub-Api-Version': '2022-11-28'
     }
   });
-  if (response.status === 401 || response.status === 403) {
-    throw new Error("GitHub authentication failed – check token or scopes");
-  }
-  return response;
 }
 
-if (data === 'upload_videos') {
-  await sendTelegramMessage(BOT_TOKEN, chatId, "🔍 Parsing 1.m3u and preparing uploads...");
-  await uploadVideosFromSeedr(chatId);
-}
-
-async function uploadVideosFromSeedr(chatId) {
-  const fetch = (await import('node-fetch')).default;
-  const fs = require('fs');
-  const FormData = (await import('form-data')).default;
-
-  const m3uUrl = `https://raw.githubusercontent.com/${GITHUB_REPO}/main/1.m3u`;
-  const m3uRes = await fetch(m3uUrl);
-  const text = await m3uRes.text();
-
-  const urls = text.split('\n').filter(l => l.startsWith('http'));
-  await sendTelegramMessage(BOT_TOKEN, chatId, `🎬 Found ${urls.length} videos in playlist.`);
-
-  for (let i = 0; i < urls.length; i++) {
-    const url = urls[i].trim();
-    const fileName = decodeURIComponent(url.split('/').pop().split('?')[0]);
-    await sendTelegramMessage(BOT_TOKEN, chatId, `📥 Downloading (${i + 1}/${urls.length}): ${fileName}`);
-
-    try {
-      // check if file already exists on server
-      const checkRes = await fetch(`${process.env.CHECK_URL}?key=${process.env.UPLOAD_KEY}&file=${encodeURIComponent(fileName)}`);
-      const existsData = await checkRes.json();
-      if (existsData.exists) {
-        await sendTelegramMessage(BOT_TOKEN, chatId, `⚠️ File "${fileName}" already exists. Overwrite?`, [
-          [{ text: "✅ Yes", callback_data: `overwrite_${fileName}` }],
-          [{ text: "❌ No", callback_data: "skip" }]
-        ]);
-        continue;
-      }
-
-      await downloadAndUpload(url, fileName);
-      await sendTelegramMessage(BOT_TOKEN, chatId, `✅ Uploaded ${fileName}`);
-    } catch (err) {
-      await sendTelegramMessage(BOT_TOKEN, chatId, `❌ Failed ${fileName}: ${err.message}`);
-    }
-  }
-
-  await sendTelegramMessage(BOT_TOKEN, chatId, "🎉 Upload completed.");
-}
-
-async function downloadAndUpload(videoUrl, fileName) {
-  const fetch = (await import('node-fetch')).default;
-  const FormData = (await import('form-data')).default;
-  const fs = require('fs');
-
-  const tmp = `/tmp/${fileName}`;
-  const res = await fetch(videoUrl);
-  if (!res.ok) throw new Error(`Download failed (${res.status})`);
-  const buf = await res.arrayBuffer();
-  fs.writeFileSync(tmp, Buffer.from(buf));
-
-  const form = new FormData();
-  form.append('key', process.env.UPLOAD_KEY);
-  form.append('file', fs.createReadStream(tmp), fileName);
-  const uploadRes = await fetch(process.env.UPLOAD_URL, { method: 'POST', body: form });
-  const result = await uploadRes.json();
-
-  if (!uploadRes.ok || !result.ok) throw new Error(result.error || "Upload failed");
-}
-if (data.startsWith('overwrite_')) {
-  const fileName = data.replace('overwrite_', '');
-  try {
-    await downloadAndUpload(`https://raw.githubusercontent.com/${GITHUB_REPO}/main/${fileName}`, fileName, true);
-    await sendTelegramMessage(BOT_TOKEN, chatId, `✅ Overwritten ${fileName}`);
-  } catch (err) {
-    await sendTelegramMessage(BOT_TOKEN, chatId, `❌ Failed overwrite ${fileName}: ${err.message}`);
-  }
-}
-if (text === '/uploadserver') {
-  logs.push({ timestamp: new Date().toISOString(), type: 'info', message: `Upload to server command from ${userId}` });
-  await sendTelegramMessage(BOT_TOKEN, chatId, "📂 Fetching videos from Seedr.cc...");
-  
-  try {
-    const files = await fetchSeedrVideos(process.env.SEEDR_TOKEN);
-    if (!files.length) {
-      await sendTelegramMessage(BOT_TOKEN, chatId, "⚠️ No downloadable videos found in your Seedr.");
-      return res.status(200).send("No videos found");
-    }
-
-    let msg = "Found these files:\n";
-    files.forEach((f, i) => { msg += `${i+1}. ${f.name}\n`; });
-    msg += "\nDo you want to upload all to your server? Reply YES or NO.";
-    
-    await sendTelegramMessage(BOT_TOKEN, chatId, msg);
-    uploadQueue[userId] = files; // store temporarily
-  } catch (err) {
-    await sendTelegramMessage(BOT_TOKEN, chatId, `❌ Error fetching Seedr files: ${err.message}`);
-  }
-
-  return res.status(200).send("Upload command processed");
-}
-if (uploadQueue[userId] && text && text.toLowerCase() === 'yes') {
-  const files = uploadQueue[userId];
-  delete uploadQueue[userId];
-
-  await sendTelegramMessage(BOT_TOKEN, chatId, `📤 Uploading ${files.length} videos to your server...`);
-
-  for (const f of files) {
-    try {
-      const res = await fetch(process.env.UPLOAD_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          key: process.env.UPLOAD_KEY,
-          video_url: f.url,
-          name: f.name
-        })
-      });
-
-      const text = await res.text();
-      logs.push({ timestamp: new Date().toISOString(), type: 'info', message: `Uploaded ${f.name}`, raw: text });
-      await sendTelegramMessage(BOT_TOKEN, chatId, `✅ ${f.name} uploaded.`);
-    } catch (e) {
-      logs.push({ timestamp: new Date().toISOString(), type: 'error', message: `Upload failed for ${f.name}` });
-      await sendTelegramMessage(BOT_TOKEN, chatId, `❌ Upload failed for ${f.name}`);
-    }
-  }
-}
 async function fetchSeedrVideos(token) {
   const fetch = (await import('node-fetch')).default;
-  const resp = await fetch("https://www.seedr.cc/rest/folder", {
+  const res = await fetch('https://www.seedr.cc/rest/folder', {
     headers: { Authorization: `Bearer ${token}` }
   });
-  const data = await resp.json();
-  if (!data.folders && !data.torrents) return [];
+  const data = await res.json();
+  const videos = [];
 
-  const files = [];
-  function collectFiles(obj) {
+  function walk(obj) {
     if (obj.files) {
-      obj.files.forEach(f => {
-        if (f.name.endsWith(".mp4") || f.name.endsWith(".mkv")) {
-          files.push({ name: f.name, url: f.stream_url });
-        }
-      });
+      for (const f of obj.files) {
+        if (f.name.endsWith('.mp4') || f.name.endsWith('.mkv'))
+          videos.push({ name: f.name, url: f.stream_url });
+      }
     }
-    if (obj.folders) obj.folders.forEach(collectFiles);
+    if (obj.folders) obj.folders.forEach(walk);
   }
-  collectFiles(data);
-  return files;
-}
 
+  walk(data);
+  return videos;
+}
 
 // ✅ Export app for Vercel
 module.exports = app;
