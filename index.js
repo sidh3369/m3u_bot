@@ -92,67 +92,91 @@ app.post('/webhook', async (req, res) => {
       return res.status(200).send("OK");
     }
 
-    // --- Upload Videos from Seedr ---
-    if (data === 'upload_videos') {
-      handleUploadVideos(chatId);
-      return res.status(200).send("Started upload_videos");
+    // ===== Upload Videos from 1.m3u =====
+if (text === '/uploadserver') {
+  logs.push({ timestamp: new Date().toISOString(), type: 'info', message: `Upload to server command from ${userId}` });
+  await sendTelegramMessage(BOT_TOKEN, chatId, "📂 Reading 1.m3u from GitHub...");
+
+  try {
+    const m3uUrl = `https://raw.githubusercontent.com/${GITHUB_REPO}/main/1.m3u`;
+    const res = await fetch(m3uUrl);
+    const text = await res.text();
+
+    // Extract only video file URLs (skip streams)
+    const urls = text.split('\n')
+      .map(l => l.trim())
+      .filter(l =>
+        l.startsWith('http') &&
+        !l.endsWith('.m3u8') &&   // skip streaming playlists
+        (l.includes('seedr.cc') || l.endsWith('.mp4') || l.endsWith('.mkv'))
+      );
+
+    if (!urls.length) {
+      await sendTelegramMessage(BOT_TOKEN, chatId, "⚠️ No valid video links found in 1.m3u.");
+      return res.status(200).send("No videos found");
     }
 
-    // --- /uploadserver Command ---
-    if (text === '/uploadserver') {
-      logs.push({ timestamp: new Date().toISOString(), type: 'info', message: `Upload to server command from ${userId}` });
-      await sendTelegramMessage(BOT_TOKEN, chatId, "📂 Fetching videos from Seedr.cc...");
-      try {
-        const files = await fetchSeedrVideos(process.env.SEEDR_TOKEN);
-        if (!files.length) {
-          await sendTelegramMessage(BOT_TOKEN, chatId, "⚠️ No downloadable videos found in your Seedr.");
-          return res.status(200).send("No videos found");
-        }
-        let msg = "Found these files:\n";
-        files.forEach((f, i) => { msg += `${i + 1}. ${f.name}\n`; });
-        msg += "\nDo you want to upload all to your server? Reply YES or NO.";
-        await sendTelegramMessage(BOT_TOKEN, chatId, msg);
-        uploadQueue[userId] = files;
-      } catch (err) {
-        await sendTelegramMessage(BOT_TOKEN, chatId, `❌ Error fetching Seedr files: ${err.message}`);
-      }
-      return res.status(200).send("Upload command processed");
-    }
+    let msg = `🎬 Found ${urls.length} videos:\n`;
+    urls.forEach((u, i) => msg += `${i + 1}. ${decodeURIComponent(u.split('/').pop().split('?')[0])}\n`);
+    msg += "\nDo you want to upload all to your server? Reply YES or NO.";
 
-    // --- Confirm Upload ---
-    if (uploadQueue[userId] && text && text.toLowerCase() === 'yes') {
-      const files = uploadQueue[userId];
-      delete uploadQueue[userId];
-      await sendTelegramMessage(BOT_TOKEN, chatId, `📤 Uploading ${files.length} videos to your server...`);
-      for (const f of files) {
-        try {
-          const res = await fetch(process.env.UPLOAD_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              key: process.env.UPLOAD_KEY,
-              video_url: f.url,
-              name: f.name
-            })
-          });
-          const text = await res.text();
-          logs.push({ timestamp: new Date().toISOString(), type: 'info', message: `Uploaded ${f.name}`, raw: text });
-          await sendTelegramMessage(BOT_TOKEN, chatId, `✅ ${f.name} uploaded.`);
-        } catch (e) {
-          logs.push({ timestamp: new Date().toISOString(), type: 'error', message: `Upload failed for ${f.name}` });
-          await sendTelegramMessage(BOT_TOKEN, chatId, `❌ Upload failed for ${f.name}`);
-        }
-      }
-      return res.status(200).send("Uploads done");
-    }
+    uploadQueue[userId] = urls;
+    await sendTelegramMessage(BOT_TOKEN, chatId, msg);
 
-    return res.status(200).send("Unhandled");
   } catch (err) {
-    console.error("Webhook error:", err.message);
-    logs.push({ timestamp: new Date().toISOString(), type: 'error', message: err.message });
-    return res.status(500).send("Error");
+    await sendTelegramMessage(BOT_TOKEN, chatId, `❌ Failed to read 1.m3u: ${err.message}`);
   }
-});
+
+  return res.status(200).send("Upload command processed");
+}
+
+// ===== Handle YES reply =====
+if (uploadQueue[userId] && text && text.toLowerCase() === 'yes') {
+  const urls = uploadQueue[userId];
+  delete uploadQueue[userId];
+
+  await sendTelegramMessage(BOT_TOKEN, chatId, `📤 Uploading ${urls.length} videos to your server...`);
+
+  for (const videoUrl of urls) {
+    const fileName = decodeURIComponent(videoUrl.split('/').pop().split('?')[0]);
+    try {
+      const result = await downloadAndUpload(videoUrl, fileName);
+      await sendTelegramMessage(BOT_TOKEN, chatId, `✅ Uploaded ${fileName}`);
+    } catch (err) {
+      await sendTelegramMessage(BOT_TOKEN, chatId, `❌ Failed ${fileName}: ${err.message}`);
+    }
+  }
+
+  await sendTelegramMessage(BOT_TOKEN, chatId, "🎉 Upload completed.");
+}
+
+    async function downloadAndUpload(videoUrl, fileName) {
+  const fetch = (await import('node-fetch')).default;
+  const FormData = (await import('form-data')).default;
+  const fs = require('fs');
+
+  const tmpPath = `/tmp/${fileName}`;
+  const res = await fetch(videoUrl);
+  if (!res.ok) throw new Error(`Download failed (${res.status})`);
+
+  // Save file temporarily
+  const buf = await res.arrayBuffer();
+  fs.writeFileSync(tmpPath, Buffer.from(buf));
+
+  // Upload to your Linux host
+  const form = new FormData();
+  form.append('key', process.env.UPLOAD_KEY);        // simple auth key
+  form.append('file', fs.createReadStream(tmpPath), fileName);
+
+  const uploadRes = await fetch(process.env.UPLOAD_URL, { method: 'POST', body: form });
+  const result = await uploadRes.json().catch(() => ({}));
+
+  if (!uploadRes.ok || !result.ok) throw new Error(result.error || "Upload failed");
+
+  fs.unlinkSync(tmpPath); // cleanup temp file
+  return result;
+}
+
 
 // --- HELPER: Upload Videos ---
 async function handleUploadVideos(chatId) {
