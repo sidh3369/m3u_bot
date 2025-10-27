@@ -2,6 +2,8 @@
 const express = require('express');
 const dotenv = require('dotenv');
 const path = require('path');
+const fetch = require('node-fetch').default; // Import once at the top
+
 dotenv.config();
 
 const app = express();
@@ -23,25 +25,39 @@ const ALLOWED_USER_IDS = (MY_ID || '').split(',').map(id => id.trim());
 
 // ========== TELEGRAM WEBHOOK HANDLER ==========
 app.post('/webhook', async (req, res) => {
-  const fetch = (await import('node-fetch')).default;
   const body = req.body;
-  if (!body.message) return res.status(200).send('No message');
+  if (!body.message && !body.callback_query) return res.status(200).send('No message or callback');
 
-  const chatId = body.message.chat.id;
-  const userId = body.message.from?.id?.toString();
-  const text = body.message.text;
-  const document = body.message.document;
-  const callback = body.callback_query?.data;
+  let chatId;
+  let userId;
+  let text;
+  let document;
+  let callback;
+
+  if (body.message) {
+    chatId = body.message.chat.id;
+    userId = body.message.from?.id?.toString();
+    text = body.message.text;
+    document = body.message.document;
+  } else if (body.callback_query) {
+    chatId = body.callback_query.message.chat.id;
+    userId = body.callback_query.from?.id?.toString();
+    callback = body.callback_query.data;
+  }
 
   try {
-    // --- Start command ---
-    if (text === '/start') {
-      await sendTelegramMessage(BOT_TOKEN, chatId, '👋 Welcome! Send an .m3u file or use /uploadserver to upload videos from Seedr.cc');
-      return res.status(200).send('OK');
+    // --- Handle Telegram "upload_videos" button ---
+    if (callback === 'upload_videos') {
+      await handleUploadVideos(chatId);
+    }
+
+    async function handleUploadVideos(chatId) {
+      await sendTelegramMessage(BOT_TOKEN, chatId, "🔍 Parsing 1.m3u and preparing uploads...");
+      await uploadVideosFromSeedr(chatId);
     }
 
     // --- Upload .m3u to GitHub ---
-    if (document && document.file_name.toLowerCase().endsWith('.m3u')) {
+    if (document && document.file_name && document.file_name.toLowerCase().endsWith('.m3u')) {
       if (!ALLOWED_USER_IDS.includes(userId)) {
         await sendTelegramMessage(BOT_TOKEN, chatId, '❌ Unauthorized user.');
         return res.status(200).send('Unauthorized');
@@ -126,7 +142,9 @@ app.post('/webhook', async (req, res) => {
   } catch (e) {
     console.error('Bot error:', e);
     logs.push({ type: 'error', message: e.message });
-    await sendTelegramMessage(BOT_TOKEN, chatId, `❌ Error: ${e.message}`);
+    if (chatId) {
+      await sendTelegramMessage(BOT_TOKEN, chatId, `❌ Error: ${e.message}`);
+    }
     return res.status(500).send('Error');
   }
 });
@@ -137,7 +155,6 @@ app.get('/status', (req, res) => res.json({ version: '1.0.0', uptime: process.up
 
 // ========== Helper Functions ==========
 async function sendTelegramMessage(token, chat_id, text) {
-  const fetch = (await import('node-fetch')).default;
   await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -146,7 +163,6 @@ async function sendTelegramMessage(token, chat_id, text) {
 }
 
 async function getGitHubFileSha(repo, token, path) {
-  const fetch = (await import('node-fetch')).default;
   const res = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
     headers: { Authorization: `Bearer ${token}` }
   });
@@ -156,7 +172,6 @@ async function getGitHubFileSha(repo, token, path) {
 }
 
 async function githubFetch(url, options) {
-  const fetch = (await import('node-fetch')).default;
   return fetch(url, {
     ...options,
     headers: {
@@ -168,7 +183,6 @@ async function githubFetch(url, options) {
 }
 
 async function fetchSeedrVideos(token) {
-  const fetch = (await import('node-fetch')).default;
   const res = await fetch('https://www.seedr.cc/rest/folder', {
     headers: { Authorization: `Bearer ${token}` }
   });
