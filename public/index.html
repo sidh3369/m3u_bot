@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BOT 2.2</title>
+  <title>Stremio 2.3 M3U Bot — Dashboard</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -16,7 +16,6 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: flex-start;
     }
     header {
       width: 100%;
@@ -28,179 +27,147 @@
       position: sticky;
       top: 0;
     }
-    h1 {
-      font-size: 1.5rem;
-      margin: 0;
-      color: #00d4ff;
-      text-shadow: 0 0 10px #00d4ff50;
-    }
+    h1 { font-size: 1.4rem; color: #00d4ff; text-shadow: 0 0 10px #00d4ff60; margin: 0; }
     .buttons {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      gap: 10px;
-      margin: 15px 0;
+      display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin: 15px 0;
     }
     button {
-      background: #00d4ff;
-      color: #111;
-      border: none;
-      padding: 10px 16px;
-      border-radius: 8px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
+      background: #00d4ff; color: #111; border: none; padding: 10px 16px;
+      border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.2s;
     }
-    button:hover {
-      background: #00bcd4;
-      transform: translateY(-2px);
-    }
+    button:hover { background: #00bcd4; transform: translateY(-2px); }
     .section {
-      width: 90%;
-      max-width: 1000px;
-      margin: 12px auto;
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 12px;
-      padding: 15px;
+      width: 90%; max-width: 1000px; margin: 10px auto;
+      background: rgba(255, 255, 255, 0.05); border-radius: 12px; padding: 15px;
       box-shadow: 0 0 10px rgba(0,0,0,0.3);
     }
     .section h2 {
-      color: #00e0ff;
-      font-size: 1.1rem;
+      color: #00e0ff; font-size: 1.05rem;
       border-bottom: 1px solid rgba(255,255,255,0.2);
-      padding-bottom: 5px;
-      margin-bottom: 10px;
+      padding-bottom: 4px; margin-bottom: 8px;
     }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      color: #eee;
-    }
-    table th, table td {
-      padding: 8px;
-      text-align: left;
-      border-bottom: 1px solid rgba(255,255,255,0.1);
-      word-break: break-word;
-    }
-    table th {
-      color: #00d4ff;
-      font-weight: 600;
-    }
+    table { width: 100%; border-collapse: collapse; color: #eee; font-size: 0.9rem; }
+    table th, table td { padding: 6px 8px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    table th { color: #00d4ff; }
     #log-container {
-      max-height: 300px;
-      overflow-y: auto;
-      background: rgba(0, 0, 0, 0.3);
-      padding: 10px;
-      border-radius: 8px;
-      font-family: monospace;
-      font-size: 0.85rem;
+      max-height: 250px; overflow-y: auto; background: rgba(0, 0, 0, 0.3);
+      padding: 8px; border-radius: 8px; font-family: monospace; font-size: 0.8rem;
     }
-    footer {
-      margin: 20px 0 10px;
-      font-size: 0.8rem;
-      color: #aaa;
-      text-align: center;
-    }
-
+    footer { margin: 15px 0 10px; font-size: 0.8rem; color: #aaa; text-align: center; }
     @media (max-width: 600px) {
-      h1 { font-size: 1.2rem; }
-      button { padding: 8px 12px; font-size: 0.9rem; }
+      h1 { font-size: 1.1rem; }
+      button { padding: 8px 12px; font-size: 0.85rem; }
+      table th, table td { font-size: 0.8rem; }
     }
   </style>
 </head>
 <body>
-  <header>
-    <h1>Stremio M3U Bot — Real-time Monitoring</h1>
-  </header>
+  <header><h1>Stremio M3U Bot — Real-time Monitoring</h1></header>
 
   <div class="buttons">
-    <button onclick="refreshData()">🔄 Refresh</button>
-    <button onclick="forceRebuild()">⚙️ Force Rebuild</button>
-    <button onclick="restartBot()">🚀 Restart Bot</button>
-    <button onclick="clearLogs()">🧹 Clear Logs</button>
+    <button onclick="manualRefresh()">🔄 Refresh</button>
+    <button onclick="control('rebuild')">⚙️ Force Rebuild</button>
+    <button onclick="control('restart')">🚀 Restart Bot</button>
+    <button onclick="control('clearlogs')">🧹 Clear Logs</button>
   </div>
 
-  <div class="section" id="bot-status">
+  <div class="section">
     <h2>Bot Status</h2>
-    <p id="status-text">Checking...</p>
+    <p id="status">Loading...</p>
   </div>
 
-  <div class="section" id="current-file">
+  <div class="section">
     <h2>Current M3U File</h2>
-    <p id="current-file-text">—</p>
+    <p id="file">Loading...</p>
   </div>
 
-  <div class="section" id="quick-metrics">
+  <div class="section">
     <h2>Quick Metrics</h2>
-    <p id="metrics">—</p>
+    <p id="metrics">Loading...</p>
   </div>
 
-  <div class="section" id="upload-history">
+  <div class="section">
     <h2>Upload History (Last 10)</h2>
     <table>
-      <thead>
-        <tr><th>File</th><th>Size</th><th>Uploaded</th><th>Items</th></tr>
-      </thead>
-      <tbody id="upload-table">
-        <tr><td colspan="4">Loading...</td></tr>
-      </tbody>
+      <thead><tr><th>File</th><th>Size</th><th>Uploaded</th><th>Items</th></tr></thead>
+      <tbody id="history"><tr><td colspan="4">Loading...</td></tr></tbody>
     </table>
   </div>
 
-  <div class="section" id="recent-logs">
+  <div class="section">
     <h2>Recent Logs</h2>
-    <div id="log-container"></div>
+    <div id="log-container">Loading...</div>
   </div>
 
   <footer>
-    Connection: <span id="connection">Disconnected</span> — Last update: <span id="last-update">—</span>
+    Connection: <span id="connection">Polling</span> — Last update: <span id="last-update">—</span>
   </footer>
 
   <script>
-    const logContainer = document.getElementById("log-container");
-    const connectionSpan = document.getElementById("connection");
-    const updateSpan = document.getElementById("last-update");
+    const els = {
+      status: document.getElementById('status'),
+      file: document.getElementById('file'),
+      metrics: document.getElementById('metrics'),
+      history: document.getElementById('history'),
+      logs: document.getElementById('log-container'),
+      update: document.getElementById('last-update')
+    };
 
-    function refreshData() {
+    async function fetchJSON(url) {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`${url}: ${res.status}`);
+        return await res.json();
+      } catch (err) {
+        console.warn('Fetch error', url, err);
+        return null;
+      }
+    }
+
+    async function refreshAll() {
+      const [status, file, history, logs, sys, preview] = await Promise.all([
+        fetchJSON('/status'),
+        fetchJSON('/fileinfo'),
+        fetchJSON('/history'),
+        fetchJSON('/logs'),
+        fetchJSON('/sysinfo'),
+        fetchJSON('/preview')
+      ]);
+
+      if (status)
+        els.status.innerHTML = `<b>Online:</b> ${status.active} | <b>Uptime:</b> ${status.uptime} | <b>Ping:</b> ${status.ping}ms`;
+      if (file)
+        els.file.textContent = `${file.name} (${(file.size/1024).toFixed(1)} KB, ${file.items} items)`;
+      if (sys)
+        els.metrics.textContent = `CPU: ${sys.cpu}% | Memory: ${sys.memory}% | Disk: ${sys.disk}% | Uptime: ${sys.uptime}`;
+      if (history)
+        els.history.innerHTML = history.map(h => `<tr><td>${h.name}</td><td>${(h.size/1024).toFixed(1)} KB</td><td>${new Date(h.uploaded).toLocaleString()}</td><td>${h.items}</td></tr>`).join('');
+      if (logs)
+        els.logs.innerHTML = logs.map(l => `[${new Date(l.timestamp).toLocaleTimeString()}] [${l.type}] ${l.message}`).join('<br>');
+
+      els.update.textContent = new Date().toLocaleString();
+    }
+
+    function manualRefresh() {
       appendLog("INFO", "Manual refresh triggered.");
-      // fetch data here if backend API is ready
+      refreshAll();
     }
 
-    function forceRebuild() {
-      appendLog("ACTION", "Force rebuild started...");
+    async function control(action) {
+      appendLog("ACTION", `${action} requested.`);
+      await fetch(`/control/${action}`, { method: "POST" });
+      if (action === 'clearlogs') els.logs.innerHTML = '';
+      refreshAll();
     }
 
-    function restartBot() {
-      appendLog("ACTION", "Restarting bot...");
-    }
-
-    function clearLogs() {
-      logContainer.innerHTML = "";
-      appendLog("SYSTEM", "Logs cleared.");
-    }
-
-    function appendLog(level, message) {
+    function appendLog(level, msg) {
       const time = new Date().toLocaleTimeString();
-      const line = document.createElement("div");
-      line.textContent = `[${time}] [${level}] ${message}`;
-      logContainer.appendChild(line);
-      logContainer.scrollTop = logContainer.scrollHeight;
-      localStorage.setItem("botLogs", logContainer.innerHTML);
+      els.logs.innerHTML += `[${time}] [${level}] ${msg}<br>`;
+      els.logs.scrollTop = els.logs.scrollHeight;
     }
 
-    function loadSavedLogs() {
-      const saved = localStorage.getItem("botLogs");
-      if (saved) logContainer.innerHTML = saved;
-    }
-
-    // auto-refresh connection status every 5s
-    setInterval(() => {
-      connectionSpan.textContent = "Connected";
-      updateSpan.textContent = new Date().toLocaleString();
-    }, 60000);
-
-    loadSavedLogs();
-    appendLog("SYSTEM", "Dashboard initialized.");
+    refreshAll();
+    setInterval(refreshAll, 50000);
   </script>
 </body>
 </html>
