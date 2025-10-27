@@ -201,5 +201,79 @@ async function githubFetch(url, options = {}) {
   return response;
 }
 
+if (data === 'upload_videos') {
+  await sendTelegramMessage(BOT_TOKEN, chatId, "🔍 Parsing 1.m3u and preparing uploads...");
+  await uploadVideosFromSeedr(chatId);
+}
+
+async function uploadVideosFromSeedr(chatId) {
+  const fetch = (await import('node-fetch')).default;
+  const fs = require('fs');
+  const FormData = (await import('form-data')).default;
+
+  const m3uUrl = `https://raw.githubusercontent.com/${GITHUB_REPO}/main/1.m3u`;
+  const m3uRes = await fetch(m3uUrl);
+  const text = await m3uRes.text();
+
+  const urls = text.split('\n').filter(l => l.startsWith('http'));
+  await sendTelegramMessage(BOT_TOKEN, chatId, `🎬 Found ${urls.length} videos in playlist.`);
+
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i].trim();
+    const fileName = decodeURIComponent(url.split('/').pop().split('?')[0]);
+    await sendTelegramMessage(BOT_TOKEN, chatId, `📥 Downloading (${i + 1}/${urls.length}): ${fileName}`);
+
+    try {
+      // check if file already exists on server
+      const checkRes = await fetch(`${process.env.CHECK_URL}?key=${process.env.UPLOAD_KEY}&file=${encodeURIComponent(fileName)}`);
+      const existsData = await checkRes.json();
+      if (existsData.exists) {
+        await sendTelegramMessage(BOT_TOKEN, chatId, `⚠️ File "${fileName}" already exists. Overwrite?`, [
+          [{ text: "✅ Yes", callback_data: `overwrite_${fileName}` }],
+          [{ text: "❌ No", callback_data: "skip" }]
+        ]);
+        continue;
+      }
+
+      await downloadAndUpload(url, fileName);
+      await sendTelegramMessage(BOT_TOKEN, chatId, `✅ Uploaded ${fileName}`);
+    } catch (err) {
+      await sendTelegramMessage(BOT_TOKEN, chatId, `❌ Failed ${fileName}: ${err.message}`);
+    }
+  }
+
+  await sendTelegramMessage(BOT_TOKEN, chatId, "🎉 Upload completed.");
+}
+
+async function downloadAndUpload(videoUrl, fileName) {
+  const fetch = (await import('node-fetch')).default;
+  const FormData = (await import('form-data')).default;
+  const fs = require('fs');
+
+  const tmp = `/tmp/${fileName}`;
+  const res = await fetch(videoUrl);
+  if (!res.ok) throw new Error(`Download failed (${res.status})`);
+  const buf = await res.arrayBuffer();
+  fs.writeFileSync(tmp, Buffer.from(buf));
+
+  const form = new FormData();
+  form.append('key', process.env.UPLOAD_KEY);
+  form.append('file', fs.createReadStream(tmp), fileName);
+  const uploadRes = await fetch(process.env.UPLOAD_URL, { method: 'POST', body: form });
+  const result = await uploadRes.json();
+
+  if (!uploadRes.ok || !result.ok) throw new Error(result.error || "Upload failed");
+}
+if (data.startsWith('overwrite_')) {
+  const fileName = data.replace('overwrite_', '');
+  try {
+    await downloadAndUpload(`https://raw.githubusercontent.com/${GITHUB_REPO}/main/${fileName}`, fileName, true);
+    await sendTelegramMessage(BOT_TOKEN, chatId, `✅ Overwritten ${fileName}`);
+  } catch (err) {
+    await sendTelegramMessage(BOT_TOKEN, chatId, `❌ Failed overwrite ${fileName}: ${err.message}`);
+  }
+}
+
+
 // ✅ Export app for Vercel
 module.exports = app;
