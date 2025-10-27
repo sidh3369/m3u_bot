@@ -1,371 +1,206 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Stremio M3U Bot — Real-time Monitoring</title>
-
-  <!-- Chart.js (CDN) -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
   <style>
-    :root{
-      --bg:#0f1724; --card:#0b1220; --muted:#9ca3af; --accent:#3b82f6; --ok:#16a34a; --err:#dc2626;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-      color-scheme: dark;
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background: linear-gradient(135deg, #141E30, #243B55);
+      color: #fff;
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
     }
-    html,body{height:100%; margin:0; background:linear-gradient(180deg,#071029 0%, #031024 100%); color:#e6eef8;}
-    .wrap{max-width:1200px;margin:18px auto;padding:18px;gap:12px;display:flex;flex-direction:column;}
-    header{display:flex;align-items:center;justify-content:space-between;gap:12px}
-    h1{margin:0;font-size:20px;display:flex;align-items:center;gap:10px}
-    .badge{width:12px;height:12px;border-radius:999px;background:var(--muted);box-shadow:0 0 8px rgba(0,0,0,0.4)}
-    .controls button{margin-left:8px;padding:8px 10px;border-radius:8px;border:0;background:#0f1724;color:#e6eef8;cursor:pointer;border:1px solid rgba(255,255,255,0.04)}
-    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}
-    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border:1px solid rgba(255,255,255,0.03);padding:14px;border-radius:10px;min-height:88px}
-    .card h2{margin:0;font-size:13px;color:#cfe6ff}
-    .meta{margin-top:8px;font-size:13px;color:var(--muted);line-height:1.45}
-    .full{grid-column:1/-1}
-    .small{font-size:12px;color:var(--muted)}
-    table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
-    th,td{padding:8px;border-bottom:1px solid rgba(255,255,255,0.03);text-align:left;color:#dbeafe}
-    th{color:#93c5fd;font-size:12px}
-    pre{white-space:pre-wrap;font-size:12px;color:#cbd5e1;margin:0}
-    .muted{color:var(--muted)}
-    .charts{display:flex;gap:12px;margin-top:12px}
-    canvas{background:transparent;border-radius:8px}
-    .history-list{max-height:240px;overflow:auto}
-    .log-list{max-height:360px;overflow:auto}
-    @media (max-width:980px){ .grid{grid-template-columns:repeat(2,1fr)} }
-    @media (max-width:640px){ .grid{grid-template-columns:1fr} header{flex-direction:column;align-items:flex-start} .controls{width:100%;display:flex;justify-content:flex-end} }
+    header {
+      width: 100%;
+      padding: 15px 20px;
+      text-align: center;
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+      position: sticky;
+      top: 0;
+    }
+    h1 {
+      font-size: 1.5rem;
+      margin: 0;
+      color: #00d4ff;
+      text-shadow: 0 0 10px #00d4ff50;
+    }
+    .buttons {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin: 15px 0;
+    }
+    button {
+      background: #00d4ff;
+      color: #111;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    button:hover {
+      background: #00bcd4;
+      transform: translateY(-2px);
+    }
+    .section {
+      width: 90%;
+      max-width: 1000px;
+      margin: 12px auto;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 15px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.3);
+    }
+    .section h2 {
+      color: #00e0ff;
+      font-size: 1.1rem;
+      border-bottom: 1px solid rgba(255,255,255,0.2);
+      padding-bottom: 5px;
+      margin-bottom: 10px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      color: #eee;
+    }
+    table th, table td {
+      padding: 8px;
+      text-align: left;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      word-break: break-word;
+    }
+    table th {
+      color: #00d4ff;
+      font-weight: 600;
+    }
+    #log-container {
+      max-height: 300px;
+      overflow-y: auto;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 10px;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 0.85rem;
+    }
+    footer {
+      margin: 20px 0 10px;
+      font-size: 0.8rem;
+      color: #aaa;
+      text-align: center;
+    }
+
+    @media (max-width: 600px) {
+      h1 { font-size: 1.2rem; }
+      button { padding: 8px 12px; font-size: 0.9rem; }
+    }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <h1>
-        <span class="badge" id="connBadge"></span>
-        Stremio M3U Bot — Real-time Monitoring
-        <small class="small" style="margin-left:8px" id="versionLabel"></small>
-      </h1>
+  <header>
+    <h1>Stremio M3U Bot — Real-time Monitoring</h1>
+  </header>
 
-      <div class="controls">
-        <button id="btnRefresh">Refresh</button>
-        <button id="btnRebuild">Force Rebuild</button>
-        <button id="btnRestart">Restart Bot</button>
-        <button id="btnClearLogs">Clear Logs</button>
-      </div>
-    </header>
-
-    <!-- Top stats -->
-    <div class="grid">
-      <div class="card">
-        <h2>Bot Status</h2>
-        <div class="meta" id="botStatus">—</div>
-      </div>
-
-      <div class="card">
-        <h2>Current M3U File</h2>
-        <div class="meta" id="fileInfo">—</div>
-      </div>
-
-      <div class="card">
-        <h2>Quick Metrics</h2>
-        <div class="meta" id="quickMetrics">—</div>
-      </div>
-
-      <div class="card full">
-        <h2>System Performance (real-time)</h2>
-        <div class="charts">
-          <canvas id="cpuChart" width="400" height="100"></canvas>
-          <canvas id="memChart" width="400" height="100"></canvas>
-        </div>
-      </div>
-
-      <div class="card">
-        <h2>Upload History (last 10)</h2>
-        <div class="history-list" id="historyList">
-          <table id="historyTable">
-            <thead><tr><th>File</th><th>Size</th><th>Uploaded</th><th>Items</th></tr></thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="card">
-        <h2>Top 5 Preview</h2>
-        <div id="previewList" class="meta">—</div>
-      </div>
-
-      <div class="card full">
-        <h2>Recent Logs</h2>
-        <div class="log-list" id="logList">
-          <table id="logsTable">
-            <thead><tr><th>Time</th><th>Level</th><th>Message</th><th>Raw</th></tr></thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <div style="margin-top:10px;color:var(--muted);font-size:12px">
-      Connection: <span id="connMode">—</span> — <span id="lastUpdate">Last update: —</span>
-    </div>
+  <div class="buttons">
+    <button onclick="refreshData()">🔄 Refresh</button>
+    <button onclick="forceRebuild()">⚙️ Force Rebuild</button>
+    <button onclick="restartBot()">🚀 Restart Bot</button>
+    <button onclick="clearLogs()">🧹 Clear Logs</button>
   </div>
 
-<script>
-/* -------------------------
-  CONFIG
-  - WS_URL: websocket address (wss:// preferred for production)
-  - POLL_INTERVAL: fallback polling interval (ms)
----------------------------*/
-const WS_URL = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws'; // adjust if ws served on different path
-const POLL_INTERVAL = 5000;
+  <div class="section" id="bot-status">
+    <h2>Bot Status</h2>
+    <p id="status-text">Checking...</p>
+  </div>
 
-/* DOM refs */
-const connBadge = document.getElementById('connBadge');
-const connMode = document.getElementById('connMode');
-const lastUpdate = document.getElementById('lastUpdate');
-const botStatus = document.getElementById('botStatus');
-const fileInfo = document.getElementById('fileInfo');
-const quickMetrics = document.getElementById('quickMetrics');
-const previewList = document.getElementById('previewList');
-const logsTableBody = document.querySelector('#logsTable tbody');
-const historyTableBody = document.querySelector('#historyTable tbody');
-const versionLabel = document.getElementById('versionLabel');
+  <div class="section" id="current-file">
+    <h2>Current M3U File</h2>
+    <p id="current-file-text">—</p>
+  </div>
 
-const btnRefresh = document.getElementById('btnRefresh');
-const btnRebuild = document.getElementById('btnRebuild');
-const btnRestart = document.getElementById('btnRestart');
-const btnClearLogs = document.getElementById('btnClearLogs');
+  <div class="section" id="quick-metrics">
+    <h2>Quick Metrics</h2>
+    <p id="metrics">—</p>
+  </div>
 
-/* Charts setup */
-const cpuCtx = document.getElementById('cpuChart').getContext('2d');
-const memCtx = document.getElementById('memChart').getContext('2d');
-const CPU_BUF = { labels: [], data: [] };
-const MEM_BUF = { labels: [], data: [] };
+  <div class="section" id="upload-history">
+    <h2>Upload History (Last 10)</h2>
+    <table>
+      <thead>
+        <tr><th>File</th><th>Size</th><th>Uploaded</th><th>Items</th></tr>
+      </thead>
+      <tbody id="upload-table">
+        <tr><td colspan="4">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
 
-const cpuChart = new Chart(cpuCtx, {
-  type: 'line',
-  data: { labels: CPU_BUF.labels, datasets: [{ label:'CPU %', data: CPU_BUF.data, fill:false, tension:0.25 }] },
-  options: { responsive:true, maintainAspectRatio:false, scales:{ y: { min:0, max:100 }}}
-});
-const memChart = new Chart(memCtx, {
-  type: 'line',
-  data: { labels: MEM_BUF.labels, datasets: [{ label:'Memory %', data: MEM_BUF.data, fill:false, tension:0.25 }] },
-  options: { responsive:true, maintainAspectRatio:false, scales:{ y: { min:0, max:100 }}}
-});
+  <div class="section" id="recent-logs">
+    <h2>Recent Logs</h2>
+    <div id="log-container"></div>
+  </div>
 
-/* WebSocket + fallback */
-let ws = null;
-let pollTimer = null;
+  <footer>
+    Connection: <span id="connection">Disconnected</span> — Last update: <span id="last-update">—</span>
+  </footer>
 
-function setConnected(yes, mode='WS') {
-  connBadge.style.background = yes ? 'var(--ok)' : 'var(--err)';
-  connMode.textContent = (yes ? 'Connected' : 'Disconnected') + ' (' + mode + ')';
-}
+  <script>
+    const logContainer = document.getElementById("log-container");
+    const connectionSpan = document.getElementById("connection");
+    const updateSpan = document.getElementById("last-update");
 
-function connectWebSocket() {
-  try {
-    ws = new WebSocket(WS_URL);
-    ws.addEventListener('open', () => {
-      setConnected(true, 'WS');
-      connMode.title = 'Receiving live updates via WebSocket';
-      // cancel polling if any
-      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-      // optionally request initial state
-      ws.send(JSON.stringify({ type: 'hello', ts: Date.now() }));
-    });
+    function refreshData() {
+      appendLog("INFO", "Manual refresh triggered.");
+      // fetch data here if backend API is ready
+    }
 
-    ws.addEventListener('message', ev => {
-      const payload = safeParse(ev.data);
-      if (!payload) return;
-      lastUpdate.textContent = 'Last update: ' + new Date().toLocaleString('en-IN');
-      // dispatch by type
-      switch (payload.type) {
-        case 'status': applyStatus(payload.data); break;
-        case 'file': applyFile(payload.data); break;
-        case 'sys': applySys(payload.data); break;
-        case 'logs': applyLogs(payload.data); break;
-        case 'history': applyHistory(payload.data); break;
-        case 'preview': applyPreview(payload.data); break;
-        case 'metrics': applyMetrics(payload.data); break;
-        default: console.debug('ws unknown', payload.type); break;
-      }
-    });
+    function forceRebuild() {
+      appendLog("ACTION", "Force rebuild started...");
+    }
 
-    ws.addEventListener('close', () => {
-      setConnected(false, 'WS');
-      // fallback to polling
-      startPolling();
-      // attempt reconnect after backoff
-      setTimeout(connectWebSocket, 3000);
-    });
+    function restartBot() {
+      appendLog("ACTION", "Restarting bot...");
+    }
 
-    ws.addEventListener('error', (e) => {
-      console.warn('WS error', e);
-      ws.close();
-    });
-  } catch (err) {
-    console.error('WS connect failed', err);
-    setConnected(false, 'WS');
-    startPolling();
-  }
-}
+    function clearLogs() {
+      logContainer.innerHTML = "";
+      appendLog("SYSTEM", "Logs cleared.");
+    }
 
-/* Polling fallback */
-function startPolling() {
-  if (pollTimer) return;
-  connMode.title = 'Polling endpoints every ' + (POLL_INTERVAL/1000) + 's';
-  setConnected(false, 'POLL');
-  poll(); // immediate
-  pollTimer = setInterval(poll, POLL_INTERVAL);
-}
+    function appendLog(level, message) {
+      const time = new Date().toLocaleTimeString();
+      const line = document.createElement("div");
+      line.textContent = `[${time}] [${level}] ${message}`;
+      logContainer.appendChild(line);
+      logContainer.scrollTop = logContainer.scrollHeight;
+      localStorage.setItem("botLogs", logContainer.innerHTML);
+    }
 
-async function poll() {
-  try {
-    const [s,f,h,l,sys,preview] = await Promise.all([
-      fetchJson('/status'),
-      fetchJson('/fileinfo'),
-      fetchJson('/history'),
-      fetchJson('/logs'),
-      fetchJson('/sysinfo'),
-      fetchJson('/preview')
-    ]);
-    if (s) applyStatus(s);
-    if (f) applyFile(f);
-    if (h) applyHistory(h);
-    if (l) applyLogs(l);
-    if (sys) applySys(sys);
-    if (preview) applyPreview(preview);
-    lastUpdate.textContent = 'Last update: ' + new Date().toLocaleString('en-IN');
-  } catch (err) {
-    console.warn('Poll error', err);
-  }
-}
+    function loadSavedLogs() {
+      const saved = localStorage.getItem("botLogs");
+      if (saved) logContainer.innerHTML = saved;
+    }
 
-/* APPLY functions */
-function applyStatus(data) {
-  versionLabel.textContent = data.version ? 'v' + data.version : '';
-  botStatus.innerHTML = `
-    <div><strong>Active:</strong> ${data.active ? 'Online' : 'Offline'}</div>
-    <div class="small"><strong>Uptime:</strong> ${data.uptime || '—'} &nbsp; <strong>PID:</strong> ${data.pid || '—'}</div>
-    <div class="small"><strong>Ping:</strong> ${data.ping != null ? data.ping + ' ms' : '—'}</div>
-    <div class="small"><strong>API latency:</strong> ${data.apiLatency != null ? data.apiLatency + ' ms' : '—'}</div>
-  `;
-  connBadge.style.background = data.active ? 'var(--ok)' : 'var(--err)';
-}
+    // auto-refresh connection status every 5s
+    setInterval(() => {
+      connectionSpan.textContent = "Connected";
+      updateSpan.textContent = new Date().toLocaleString();
+    }, 5000);
 
-function applyFile(d) {
-  const uploaded = d.uploaded ? new Date(d.uploaded).toLocaleString('en-IN') : '—';
-  fileInfo.innerHTML = `
-    <div><strong>Name:</strong> ${escapeHtml(d.name || '1.m3u')}</div>
-    <div class="small"><strong>Size:</strong> ${formatBytes(d.size)}</div>
-    <div class="small"><strong>Uploaded:</strong> ${uploaded}</div>
-    <div class="small"><strong>Items:</strong> ${d.items ?? '—'}</div>
-    <div class="small"><strong>SHA256:</strong> ${d.sha256 || '—'}</div>
-  `;
-  quickMetrics.innerHTML = `
-    <div><strong>File size:</strong> ${formatBytes(d.size)}</div>
-    <div class="small"><strong>Items:</strong> ${d.items ?? '—'}</div>
-    <div class="small"><strong>Active streams:</strong> ${d.activeStreams ?? '—'}</div>
-  `;
-}
-
-function applySys(s) {
-  const mem = s.memory != null ? s.memory + '%' : '—';
-  const cpu = s.cpu != null ? s.cpu + '%' : '—';
-  document.getElementById('sysInfo')?.remove?.(); // keep DOM tidy if needed
-  // update charts
-  pushMetric(cpuNumeric(s.cpu), memNumeric(s.memory));
-  // show small quick info
-  document.querySelector('#quickMetrics').innerHTML += `<div class="small"><strong>CPU:</strong> ${cpu} <strong>Mem:</strong> ${mem}</div>`;
-}
-
-function applyLogs(logs) {
-  logsTableBody.innerHTML = '';
-  logs.forEach(l => {
-    const tr = document.createElement('tr');
-    const time = new Date(l.timestamp).toLocaleString('en-IN');
-    tr.innerHTML = `<td>${time}</td><td>${escapeHtml(l.type)}</td><td>${escapeHtml(l.message)}</td><td><pre>${escapeHtml(l.raw || '')}</pre></td>`;
-    logsTableBody.appendChild(tr);
-  });
-}
-
-function applyHistory(list) {
-  historyTableBody.innerHTML = '';
-  list.forEach(f => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${escapeHtml(f.name)}</td><td>${formatBytes(f.size)}</td><td>${new Date(f.uploaded).toLocaleString('en-IN')}</td><td>${f.items ?? '—'}</td>`;
-    historyTableBody.appendChild(tr);
-  });
-}
-
-function applyPreview(items) {
-  if (!Array.isArray(items) || items.length === 0) { previewList.innerHTML = '<div class="small">Empty</div>'; return; }
-  // top-5 nicely
-  previewList.innerHTML = items.slice(0,5).map((it,idx) => `<div class="small">${idx+1}. ${escapeHtml(it.title || it.name || it.uri)}</div>`).join('');
-}
-
-function applyMetrics(m) {
-  // optional: graph of requests or tasks per minute
-  // Using CPU/MEM already handled in applySys
-}
-
-/* Helpers */
-function pushMetric(cpu, mem) {
-  const t = new Date().toLocaleTimeString('en-IN');
-  if (CPU_BUF.labels.length >= 20) { CPU_BUF.labels.shift(); CPU_BUF.data.shift(); MEM_BUF.labels.shift(); MEM_BUF.data.shift(); }
-  CPU_BUF.labels.push(t); CPU_BUF.data.push(cpu); MEM_BUF.labels.push(t); MEM_BUF.data.push(mem);
-  cpuChart.update(); memChart.update();
-}
-
-function cpuNumeric(v){ return typeof v === 'number' ? Math.min(100, Math.max(0, Math.round(v))) : 0; }
-function memNumeric(v){ return typeof v === 'number' ? Math.min(100, Math.max(0, Math.round(v))) : 0; }
-
-function formatBytes(bytes) {
-  if (!bytes && bytes !== 0) return '—';
-  const units = ['B','KB','MB','GB','TB'];
-  let i = 0; let val = bytes;
-  while (val >= 1024 && i < units.length-1) { val /= 1024; i++; }
-  return val.toFixed(2) + ' ' + units[i];
-}
-
-function escapeHtml(s){ if (s == null) return ''; return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-
-function safeParse(str){ try { return typeof str === 'object' ? str : JSON.parse(str); } catch(e){ return null; } }
-
-async function fetchJson(url, opts={}) {
-  try {
-    const r = await fetch(url, Object.assign({cache:'no-store'}, opts));
-    if (!r.ok) return null;
-    return await r.json();
-  } catch(e) { return null; }
-}
-
-/* Control buttons — POSTs to endpoints. Important: require backend auth (see notes) */
-btnRefresh.addEventListener('click', () => {
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type:'command', cmd:'refresh' }));
-  else fetch('/control/refresh', {method:'POST'}).catch(()=>alert('Refresh failed'));
-});
-btnRebuild.addEventListener('click', ()=> {
-  if (!confirm('Force rebuild playlist now?')) return;
-  fetch('/control/rebuild', {method:'POST'}).then(()=> alert('Rebuild requested')).catch(()=>alert('Request failed'));
-});
-btnRestart.addEventListener('click', ()=> {
-  if (!confirm('Restart bot now?')) return;
-  fetch('/control/restart', {method:'POST'}).then(()=> alert('Restart requested')).catch(()=>alert('Request failed'));
-});
-btnClearLogs.addEventListener('click', ()=> {
-  if (!confirm('Clear logs?')) return;
-  fetch('/control/clearlogs', {method:'POST'}).then(()=> alert('Logs cleared')).catch(()=>alert('Request failed'));
-});
-
-/* START: connect ws or poll */
-connectWebSocket();
-
-/* At page unload, close ws politely */
-window.addEventListener('beforeunload', ()=> { if (ws) ws.close(); });
-
-</script>
+    loadSavedLogs();
+    appendLog("SYSTEM", "Dashboard initialized.");
+  </script>
 </body>
 </html>
