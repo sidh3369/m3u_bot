@@ -2,6 +2,7 @@
 const express = require('express');
 const dotenv = require('dotenv');
 const path = require('path');
+const uploadQueue = {};
 dotenv.config(); // ✅ Load env FIRST
 
 const app = express();
@@ -295,6 +296,55 @@ if (text === '/uploadserver') {
   }
 
   return res.status(200).send("Upload command processed");
+}
+if (uploadQueue[userId] && text && text.toLowerCase() === 'yes') {
+  const files = uploadQueue[userId];
+  delete uploadQueue[userId];
+
+  await sendTelegramMessage(BOT_TOKEN, chatId, `📤 Uploading ${files.length} videos to your server...`);
+
+  for (const f of files) {
+    try {
+      const res = await fetch(process.env.UPLOAD_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          key: process.env.UPLOAD_KEY,
+          video_url: f.url,
+          name: f.name
+        })
+      });
+
+      const text = await res.text();
+      logs.push({ timestamp: new Date().toISOString(), type: 'info', message: `Uploaded ${f.name}`, raw: text });
+      await sendTelegramMessage(BOT_TOKEN, chatId, `✅ ${f.name} uploaded.`);
+    } catch (e) {
+      logs.push({ timestamp: new Date().toISOString(), type: 'error', message: `Upload failed for ${f.name}` });
+      await sendTelegramMessage(BOT_TOKEN, chatId, `❌ Upload failed for ${f.name}`);
+    }
+  }
+}
+async function fetchSeedrVideos(token) {
+  const fetch = (await import('node-fetch')).default;
+  const resp = await fetch("https://www.seedr.cc/rest/folder", {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  const data = await resp.json();
+  if (!data.folders && !data.torrents) return [];
+
+  const files = [];
+  function collectFiles(obj) {
+    if (obj.files) {
+      obj.files.forEach(f => {
+        if (f.name.endsWith(".mp4") || f.name.endsWith(".mkv")) {
+          files.push({ name: f.name, url: f.stream_url });
+        }
+      });
+    }
+    if (obj.folders) obj.folders.forEach(collectFiles);
+  }
+  collectFiles(data);
+  return files;
 }
 
 
