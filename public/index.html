@@ -85,6 +85,62 @@
     <h2>Quick Metrics</h2>
     <p id="metrics">Loading...</p>
   </div>
+<!-- Add after "Quick Metrics" section -->
+<div class="section" id="upload-progress">
+  <h2>Upload Progress</h2>
+  <p id="upload-status">No active uploads.</p>
+  <div style="background:#333;border-radius:6px;overflow:hidden;height:14px;">
+    <div id="progress-bar" style="width:0%;background:#00e0ff;height:14px;transition:width 0.5s;"></div>
+  </div>
+</div>
+
+<div class="section" id="folder-list">
+  <h2>Server Folders</h2>
+  <ul id="folders" style="list-style:none;padding:0;margin:0;"></ul>
+</div>
+
+<script>
+async function refreshProgress() {
+  try {
+    const p = await fetch('/progress').then(r => r.json());
+    const bar = document.getElementById('progress-bar');
+    const status = document.getElementById('upload-status');
+
+    if (p.active) {
+      const percent = ((p.completed / p.total) * 100).toFixed(1);
+      bar.style.width = percent + '%';
+      status.textContent = `Uploading: ${p.currentFile} (${p.completed}/${p.total})`;
+    } else {
+      bar.style.width = '0%';
+      status.textContent = 'No active uploads.';
+    }
+  } catch (e) {
+    console.warn(e);
+  }
+}
+
+async function refreshFolders() {
+  try {
+    const f = await fetch('/folders').then(r => r.json());
+    const list = document.getElementById('folders');
+    list.innerHTML = '';
+    if (f.ok && f.folders.length) {
+      f.folders.forEach(fd => {
+        const li = document.createElement('li');
+        li.textContent = '📁 ' + fd;
+        list.appendChild(li);
+      });
+    } else list.innerHTML = '<li style="color:#999;">No folders found</li>';
+  } catch (e) {
+    console.warn(e);
+  }
+}
+
+setInterval(() => {
+  refreshProgress();
+  refreshFolders();
+}, 5000);
+</script>
 
   <div class="section">
     <h2>Upload History (Last 10)</h2>
