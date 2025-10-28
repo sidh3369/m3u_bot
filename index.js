@@ -13,6 +13,13 @@ app.get("/", (req, res) => {
 });
 
 const logs = [];
+let uploadProgress = {
+  active: false,
+  total: 0,
+  completed: 0,
+  current: "",
+};
+
 const uploadQueue = {};
 
 const {
@@ -40,9 +47,31 @@ app.post('/webhook', async (req, res) => {
 
     // /start
     if (text === '/start') {
-      await sendTelegramMessage(BOT_TOKEN, chatId,
-        "👋 Welcome!\n\nSend me a `.m3u` file to update it on GitHub.\nOr send `/uploadserver` to upload videos from playlist to your server."
-      );
+
+      uploadProgress.active = true;
+uploadProgress.total = urls.length;
+uploadProgress.completed = 0;
+
+await sendTelegramMessage(BOT_TOKEN, chatId, `📤 Upload Started (${urls.length} videos)`);
+
+for (const videoUrl of urls) {
+  const fileName = decodeURIComponent(videoUrl.split('/').pop().split('?')[0]);
+  uploadProgress.current = fileName;
+
+  try {
+    await downloadAndUpload(videoUrl, fileName);
+    uploadProgress.completed++;
+    await sendTelegramMessage(BOT_TOKEN, chatId, `✅ Uploaded: ${fileName}`);
+  } catch (err) {
+    logs.push({ type: "error", message: `Failed ${fileName}: ${err.message}` });
+    await sendTelegramMessage(BOT_TOKEN, chatId, `❌ Failed: ${fileName}`);
+  }
+}
+
+uploadProgress.active = false;
+uploadProgress.current = "";
+await sendTelegramMessage(BOT_TOKEN, chatId, "🎉 Upload completed.");
+
       return res.sendStatus(200);
     }
 
@@ -59,7 +88,16 @@ app.post('/webhook', async (req, res) => {
 
       let msg = `🎬 Found ${urls.length} videos:\n\n`;
       urls.forEach((u, i) => msg += `${i+1}. ${decodeURIComponent(u.split('/').pop().split('?')[0])}\n`);
-      msg += "\nReply YES to start uploading.";
+      await sendTelegramMessage(
+  BOT_TOKEN,
+  chatId,
+  msg + "\nSelect an option:",
+  [
+    [{ text: "✅ Yes", callback_data: "confirm_yes" }],
+    [{ text: "❌ No",  callback_data: "confirm_no" }]
+  ]
+);
+
 
       await sendTelegramMessage(BOT_TOKEN, chatId, msg);
       return res.sendStatus(200);
@@ -81,6 +119,25 @@ app.post('/webhook', async (req, res) => {
           await sendTelegramMessage(BOT_TOKEN, chatId, `❌ Failed: ${fileName}\nReason: ${err.message}`);
         }
       }
+if (body.callback_query) {
+  const data = body.callback_query.data;
+  const chatId = body.callback_query.message.chat.id;
+  const userId = body.callback_query.from.id.toString();
+
+  if (data === "confirm_no") {
+    delete uploadQueue[userId];
+    await sendTelegramMessage(BOT_TOKEN, chatId, "❌ Upload cancelled.");
+    return res.sendStatus(200);
+  }
+
+  if (data === "confirm_yes" && uploadQueue[userId]) {
+    const urls = uploadQueue[userId];
+    delete uploadQueue[userId];
+    // <-- Upload loop will run here (Step 3 code)
+  }
+
+  return res.sendStatus(200);
+}
 
       await sendTelegramMessage(BOT_TOKEN, chatId, "🎉 Upload Completed.");
       return res.sendStatus(200);
@@ -197,5 +254,19 @@ async function githubPut(path, content, sha) {
     })
   });
 }
+app.get('/upload-progress', (req, res) => {
+  res.json(uploadProgress);
+});
+
+app.get('/folders', async (req, res) => {
+  try {
+    const fetch = (await import('node-fetch')).default;
+    const r = await fetch(`${UPLOAD_URL}?key=${UPLOAD_KEY}&list=1`);
+    const data = await r.json();
+    res.json(data);
+  } catch (err) {
+    res.json({ error: err.message });
+  }
+});
 
 module.exports = app;
