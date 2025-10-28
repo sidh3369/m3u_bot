@@ -122,15 +122,26 @@ app.post('/webhook', async (req, res) => {
 app.get("/logs", (req, res) => res.json(logs.slice(-20)));
 app.get("/status", (req, res) => res.json({ active: true }));
 
-// ✅ Helper Functions
-async function sendTelegram(chatId, text) {
-  const fetch = (await import("node-fetch")).default;
-  await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+async function sendTelegramMessage(token, chat_id, text, keyboard = null) {
+  const fetch = (await import('node-fetch')).default;
+
+  const payload = {
+    chat_id,
+    text,
+    parse_mode: "HTML"
+  };
+
+  if (keyboard) {
+    payload.reply_markup = { inline_keyboard: keyboard };
+  }
+
+  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text })
+    body: JSON.stringify(payload)
   });
 }
+
 
 function fileNameFromURL(url) {
   return decodeURIComponent(url.split("/").pop().split("?")[0]);
