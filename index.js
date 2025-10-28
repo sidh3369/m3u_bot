@@ -26,93 +26,94 @@ const {
 
 const ALLOWED_USER_IDS = (MY_ID || "").split(",").map(id => id.trim());
 
-// ✅ TELEGRAM WEBHOOK HANDLER
-app.post("/webhook", async (req, res) => {
-  const fetch = (await import("node-fetch")).default;
-
+app.post('/webhook', async (req, res) => {
+  const fetch = (await import('node-fetch')).default;
   try {
     const body = req.body;
     if (!body.message) return res.sendStatus(200);
 
     const chatId = body.message.chat.id;
-    const userId = body.message.from?.id?.toString();
-    const text = body.message.text;
+    const userId = body.message.from.id.toString();
+    const text = body.message.text?.trim();
 
-    // Only allow your user(s)
-    if (!ALLOWED_USER_IDS.includes(userId)) {
-      await sendTelegram(chatId, "❌ Not allowed.");
+    logs.push({ timestamp: new Date().toISOString(), type: 'info', message: `Message from ${userId}: ${text}` });
+
+    // /start
+    if (text === '/start') {
+      await sendTelegramMessage(BOT_TOKEN, chatId,
+        "👋 Welcome!\n\nSend me a `.m3u` file to update it on GitHub.\nOr send `/uploadserver` to upload videos from playlist to your server."
+      );
       return res.sendStatus(200);
     }
 
-    // Start
-    if (text === "/start") {
-      await sendTelegram(chatId, "👋 Send me an .m3u file.\nOr use /uploadserver to upload videos.");
-      return res.sendStatus(200);
-    }
+    // /uploadserver → Read playlist links
+    if (text === '/uploadserver') {
+      const urls = await getM3ULinks(GITHUB_REPO);
 
-    // ✅ Upload All Videos Command
-    if (text === "/uploadserver") {
-      await sendTelegram(chatId, "📂 Reading `1.m3u`...");
-      const urls = await getM3UVideoLinks();
       if (!urls.length) {
-        await sendTelegram(chatId, "⚠️ No video links found in 1.m3u.");
+        await sendTelegramMessage(BOT_TOKEN, chatId, "⚠️ No video links found in `1.m3u`.");
         return res.sendStatus(200);
       }
 
       uploadQueue[userId] = urls;
 
       let msg = `🎬 Found ${urls.length} videos:\n\n`;
-      urls.forEach((u, i) => msg += `${i+1}. ${fileNameFromURL(u)}\n`);
+      urls.forEach((u, i) => msg += `${i+1}. ${decodeURIComponent(u.split('/').pop().split('?')[0])}\n`);
       msg += "\nReply YES to start uploading.";
 
-      await sendTelegram(chatId, msg);
+      await sendTelegramMessage(BOT_TOKEN, chatId, msg);
       return res.sendStatus(200);
     }
 
-    // ✅ Confirm Upload
-    if (uploadQueue[userId] && text && text.toLowerCase() === "yes") {
+    // ✅ Detect "YES" reply → Start uploading
+    if (uploadQueue[userId] && text.toLowerCase() === 'yes') {
       const urls = uploadQueue[userId];
       delete uploadQueue[userId];
 
-      await sendTelegram(chatId, `📤 Uploading ${urls.length} videos...`);
-
+      await sendTelegramMessage(BOT_TOKEN, chatId, `📤 Uploading ${urls.length} video(s)...`);
       for (const url of urls) {
-        const name = fileNameFromURL(url);
+        const fileName = decodeURIComponent(url.split('/').pop().split('?')[0]);
+
         try {
-          await uploadVideo(url, name);
-          await sendTelegram(chatId, `✅ Uploaded: ${name}`);
+          await downloadAndUpload(url, fileName);
+          await sendTelegramMessage(BOT_TOKEN, chatId, `✅ Uploaded: ${fileName}`);
         } catch (err) {
-          await sendTelegram(chatId, `❌ Failed: ${name} (${err.message})`);
+          await sendTelegramMessage(BOT_TOKEN, chatId, `❌ Failed: ${fileName}\nReason: ${err.message}`);
         }
       }
 
-      await sendTelegram(chatId, "🎉 Upload complete.");
+      await sendTelegramMessage(BOT_TOKEN, chatId, "🎉 Upload Completed.");
       return res.sendStatus(200);
     }
-
-    // ✅ Handle .m3u File Upload to GitHub (1.m3u)
+     // ✅ Upload `.m3u` file to GitHub
     if (body.message.document) {
-      if (!body.message.document.file_name.endsWith(".m3u")) {
-        await sendTelegram(chatId, "❌ Only .m3u files allowed.");
-        return res.sendStatus(200);
-      }
+      const fileName = body.message.document.file_name;
+      if (!fileName.toLowerCase().endsWith(".m3u")) return res.sendStatus(200);
 
       const fileId = body.message.document.file_id;
-      const info = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${fileId}`).then(r => r.json());
+      const info = await (await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${fileId}`)).json();
       const url = `https://api.telegram.org/file/bot${BOT_TOKEN}/${info.result.file_path}`;
-      const data = await fetch(url).then(r => r.arrayBuffer());
+      const bin = await (await fetch(url)).arrayBuffer();
+      const base64 = Buffer.from(new Uint8Array(bin)).toString("base64");
+      const sha = await getGitHubFileSha(GITHUB_REPO, GITHUB_TOKEN, "1.m3u");
 
-      const base64 = Buffer.from(new Uint8Array(data)).toString("base64");
-      const sha = await getExistingSha("1.m3u");
+      await githubFetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/1.m3u`, {
+        method: "PUT",
+        body: JSON.stringify({
+          message: "Updated via bot",
+          content: base64,
+          ...(sha ? { sha } : {})
+        })
+      });
 
-      await githubPut("1.m3u", base64, sha);
-      await sendTelegram(chatId, "✅ Updated 1.m3u on GitHub.");
+      await sendTelegramMessage(BOT_TOKEN, chatId, "✅ `1.m3u` updated on GitHub.");
       return res.sendStatus(200);
     }
 
     return res.sendStatus(200);
+
   } catch (err) {
-    logs.push(err.message);
+    console.log("Webhook error:", err.message);
     return res.sendStatus(500);
   }
 });
