@@ -83,6 +83,16 @@ async function renderQueue(){
     container.appendChild(el);
   });
 }
+app.get("/upload-progress", (req, res) => {
+  res.json({
+    active: uploadProgress.active,
+    current: uploadProgress.current,
+    total: uploadProgress.total,
+    completed: uploadProgress.completed,
+    downloadSpeed: uploadProgress.downloadSpeed || "0 KB/s",
+    uploadSpeed: uploadProgress.uploadSpeed || "0 KB/s"
+  });
+});
 
 async function renderProgress(){
   const p = await fetchJSON('/progress');
